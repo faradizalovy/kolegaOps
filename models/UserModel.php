@@ -21,14 +21,6 @@ class UserModel
     {
         $role = strtolower(trim($role));
 
-        if ($role === 'owner') {
-            return 'admin';
-        }
-
-        if ($role === 'pegawai') {
-            return 'kasir';
-        }
-
         return $role;
     }
 
@@ -36,7 +28,7 @@ class UserModel
     {
         return in_array(
             $this->normalizeRole($role),
-            ['super_admin', 'admin', 'kasir'],
+            ['super_admin', 'admin', 'owner', 'kasir'],
             true
         );
     }
@@ -142,43 +134,32 @@ class UserModel
     // -------------------------------------------------------------------------
 
     /**
-     * Super Admin:
-     * - Melihat akun Super Admin, Admin, dan Pegawai.
-     * - Akun Super Admin hanya dapat dilihat.
+     * Mengambil daftar akun untuk halaman Kelola Akun.
+     * Hanya Super Admin dan Owner yang berhak mengakses fitur ini.
      *
-     * Admin:
-     * - Melihat akun Super Admin dan Pegawai.
-     * - Tidak melihat akun Admin lainnya.
-     * - Akun Super Admin hanya dapat dilihat.
+     * Super Admin:
+     * - Melihat akun Super Admin, Owner, Admin, dan Kasir.
+     *
+     * Owner:
+     * - Melihat akun Super Admin, Owner, Admin, dan Kasir.
      */
-
     public function getAllUsers(?string $viewerRole = null): array
     {
         $viewerRole = $this->normalizeRole($viewerRole ?? '');
 
-        if (!in_array($viewerRole, ['admin', 'super_admin'], true)) {
+        if (!in_array($viewerRole, ['super_admin', 'owner'], true)) {
             return [];
         }
 
-        if ($viewerRole === 'admin') {
-            $where = "
-                WHERE LOWER(u.role) IN (
-                    'super_admin',
-                    'kasir',
-                    'pegawai'
-                )
-            ";
-        } else {
-            $where = "
-                WHERE LOWER(u.role) IN (
-                    'super_admin',
-                    'admin',
-                    'owner',
-                    'kasir',
-                    'pegawai'
-                )
-            ";
-        }
+        $where = "
+            WHERE LOWER(u.role) IN (
+                'super_admin',
+                'owner',
+                'admin',
+                'kasir',
+                'pegawai'
+            )
+        ";
 
         $sql = "
             SELECT
@@ -189,10 +170,12 @@ class UserModel
                 CASE
                     WHEN LOWER(u.role) = 'super_admin'
                         THEN 'Super Admin'
-                    WHEN LOWER(u.role) IN ('owner', 'admin')
+                    WHEN LOWER(u.role) = 'owner'
+                        THEN 'Owner'
+                    WHEN LOWER(u.role) = 'admin'
                         THEN 'Admin'
                     WHEN LOWER(u.role) IN ('kasir', 'pegawai')
-                        THEN 'Pegawai'
+                        THEN 'Kasir'
                     ELSE 'Tidak Diketahui'
                 END AS role,
 
@@ -209,9 +192,7 @@ class UserModel
                 u.update_at,
 
                 CASE
-                    WHEN LOWER(u.role) = 'super_admin'
-                        THEN '—'
-                    WHEN LOWER(u.role) IN ('owner', 'admin')
+                    WHEN LOWER(u.role) IN ('super_admin', 'owner', 'admin')
                         THEN '—'
                     WHEN s.id_shift IS NOT NULL AND s.status = 'buka'
                         THEN s.nama_shift || ' · Aktif'
@@ -231,8 +212,9 @@ class UserModel
             ORDER BY
                 CASE
                     WHEN LOWER(u.role) = 'super_admin' THEN 0
-                    WHEN LOWER(u.role) IN ('owner', 'admin') THEN 1
-                    ELSE 2
+                    WHEN LOWER(u.role) = 'owner' THEN 1
+                    WHEN LOWER(u.role) = 'admin' THEN 2
+                    ELSE 3
                 END,
                 u.id_user ASC
         ";
@@ -252,11 +234,11 @@ class UserModel
         $targetRole = $this->normalizeRole($targetRole);
 
         if ($actorRole === 'super_admin') {
-            return in_array($targetRole, ['admin', 'kasir'], true);
+            return in_array($targetRole, ['owner', 'admin', 'kasir'], true);
         }
 
-        if ($actorRole === 'admin') {
-            return $targetRole === 'kasir';
+        if ($actorRole === 'owner') {
+            return in_array($targetRole, ['admin', 'kasir'], true);
         }
 
         return false;
@@ -352,19 +334,19 @@ class UserModel
 
         $targetRole = $this->normalizeRole($target['role'] ?? '');
 
-        // Semua akun Super Admin dilindungi.
+        // Semua akun Super Admin dilindungi dan tidak dapat diubah lewat form ini
         if ($targetRole === 'super_admin') {
             return false;
         }
 
         if ($actorRole === 'super_admin') {
-            return in_array($targetRole, ['admin', 'kasir'], true)
-                && in_array($newRole, ['admin', 'kasir'], true);
+            return in_array($targetRole, ['owner', 'admin', 'kasir'], true)
+                && in_array($newRole, ['owner', 'admin', 'kasir'], true);
         }
 
-        if ($actorRole === 'admin') {
-            return $targetRole === 'kasir'
-                && $newRole === 'kasir';
+        if ($actorRole === 'owner') {
+            return in_array($targetRole, ['admin', 'kasir'], true)
+                && in_array($newRole, ['admin', 'kasir'], true);
         }
 
         return false;
@@ -485,18 +467,18 @@ class UserModel
             return false;
         }
 
-        if ($actorRole === 'admin' && $targetRole !== 'kasir') {
+        if (!in_array($actorRole, ['super_admin', 'owner'], true)) {
+            return false;
+        }
+
+        if ($actorRole === 'owner' && !in_array($targetRole, ['admin', 'kasir'], true)) {
             return false;
         }
 
         if (
             $actorRole === 'super_admin'
-            && !in_array($targetRole, ['admin', 'kasir'], true)
+            && !in_array($targetRole, ['owner', 'admin', 'kasir'], true)
         ) {
-            return false;
-        }
-
-        if (!in_array($actorRole, ['super_admin', 'admin'], true)) {
             return false;
         }
 
@@ -507,9 +489,9 @@ class UserModel
                   AND LOWER(role) <> 'super_admin'
             ";
 
-            if ($actorRole === 'admin') {
+            if ($actorRole === 'owner') {
                 $sql .= "
-                    AND LOWER(role) IN ('kasir', 'pegawai')
+                    AND LOWER(role) IN ('admin', 'kasir', 'pegawai')
                 ";
             }
 

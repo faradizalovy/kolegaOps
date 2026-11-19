@@ -33,7 +33,7 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL
-        CHECK (role IN ('super_admin', 'admin', 'kasir')),
+        CHECK (role IN ('super_admin', 'owner', 'admin', 'kasir')),
     status VARCHAR(20) NOT NULL DEFAULT 'aktif',
     create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -301,6 +301,12 @@ INSERT INTO users (username, password, role, status) VALUES
 ),
 (
     'owner',
+    '$2y$10$D3GvFXArHb/8Ik8RQ5NJNeJyqohmVQHcjDqt/0ukOe.EEH9vT9t0u',
+    'owner',
+    'aktif'
+),
+(
+    'admin',
     '$2y$10$D3GvFXArHb/8Ik8RQ5NJNeJyqohmVQHcjDqt/0ukOe.EEH9vT9t0u',
     'admin',
     'aktif'

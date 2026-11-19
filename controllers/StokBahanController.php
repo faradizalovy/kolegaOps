@@ -17,36 +17,21 @@ class StokBahanController
     }
 
     /**
-     * Mengambil role pengguna yang sedang login.
-     * Role lama owner dan pegawai dinormalisasi.
+     * Mengambil role pengguna yang sedang login secara konsisten.
      */
     private function getRole(): string
     {
-        $role = strtolower((string) current_user('role'));
-
-        if (function_exists('normalize_role')) {
-            return normalize_role($role);
-        }
-
-        if ($role === 'owner') {
-            return 'admin';
-        }
-
-        if ($role === 'pegawai') {
-            return 'kasir';
-        }
-
-        return $role;
+        return normalize_role((string) current_user('role'));
     }
 
     /**
-     * Memeriksa apakah pengguna merupakan pengelola.
+     * Memeriksa apakah pengguna merupakan pengelola (Super Admin, Owner, Admin).
      */
     private function isPengelola(): bool
     {
         return in_array(
             $this->getRole(),
-            ['admin', 'super_admin'],
+            ['super_admin', 'owner', 'admin'],
             true
         );
     }
@@ -56,7 +41,7 @@ class StokBahanController
      */
     public function index(): void
     {
-        require_role(['owner', 'admin', 'kasir', 'pegawai']);
+        require_role(['super_admin', 'owner', 'admin', 'kasir', 'pegawai']);
 
         $role = $this->getRole();
 
@@ -141,7 +126,7 @@ class StokBahanController
         // Super Admin dan Admin menggunakan halaman stok Owner.
         // Kasir menggunakan halaman stok Pegawai.
         if ($this->isPengelola()) {
-            require BASE_PATH . '/views/owner/stok.php';
+            require BASE_PATH . '/views/admin/stok.php';
         } else {
             require BASE_PATH . '/views/pegawai/stok.php';
         }
@@ -149,11 +134,11 @@ class StokBahanController
 
     /**
      * Menambahkan bahan baku baru.
-     * Hanya Admin dan Super Admin yang dapat mengakses.
+     * Hanya Super Admin, Owner, dan Admin yang dapat mengakses.
      */
     public function tambah(): void
     {
-        require_role(['owner', 'admin']);
+        require_role(['super_admin', 'owner', 'admin']);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (
@@ -191,18 +176,18 @@ class StokBahanController
 
         $pesanError = get_flash('error');
 
-        require BASE_PATH . '/views/owner/tambah-stok.php';
+        require BASE_PATH . '/views/admin/tambah-stok.php';
     }
 
     /**
      * Memperbarui jumlah stok bahan baku secara manual.
-     * Hanya Admin dan Super Admin yang diperbolehkan.
+     * Hanya Super Admin, Owner, dan Admin yang diperbolehkan.
      */
     public function update($id = null): void
     {
         // Pemeriksaan dilakukan di server.
         // Kasir tidak dapat mengubah stok meskipun membuka URL langsung.
-        require_role(['owner', 'admin']);
+        require_role(['super_admin', 'owner', 'admin']);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (
@@ -399,16 +384,16 @@ class StokBahanController
 
         $pesanError = get_flash('error');
 
-        require BASE_PATH . '/views/owner/update-stok.php';
+        require BASE_PATH . '/views/admin/update-stok.php';
     }
 
     /**
      * Menghapus bahan baku.
-     * Hanya Admin dan Super Admin yang dapat mengakses.
+     * Hanya Super Admin, Owner, dan Admin yang dapat mengakses.
      */
     public function hapus($id = null): void
     {
-        require_role(['owner', 'admin']);
+        require_role(['super_admin', 'owner', 'admin']);
 
         $idStok = (int) (
             $id ?? $_GET['id'] ?? 0

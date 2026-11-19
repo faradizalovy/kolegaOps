@@ -33,11 +33,11 @@ class DashboardController
     }
 
     /**
-     * Menampilkan Dashboard Utama Owner.
+     * Menampilkan Dashboard Utama Owner, Super Admin, dan Admin.
      */
-    public function dashboard_owner(): void
+    public function dashboard_admin(): void
     {
-        require_role(['owner', 'admin']);
+        require_role(['super_admin', 'owner', 'admin']);
 
         // Menggunakan zona waktu Indonesia.
         date_default_timezone_set('Asia/Jakarta');
@@ -71,7 +71,7 @@ class DashboardController
         $tanggal_hari_ini = format_tanggal(date('Y-m-d'));
         $waktu_update = date('H:i');
 
-        require_once BASE_PATH . '/views/owner/dashboard.php';
+        require_once BASE_PATH . '/views/admin/dashboard.php';
     }
 
     /**
@@ -322,20 +322,21 @@ class DashboardController
      */
     public function index(): void
     {
-        if (!isset($_SESSION['user'])) {
-            header('Location: ../auth/login.php');
-            exit;
+        require_login();
+
+        $role = normalize_role((string) current_user('role'));
+
+        if (in_array($role, ['super_admin', 'owner', 'admin'], true)) {
+            $this->dashboard_admin();
+            return;
         }
 
-        $role = $_SESSION['user']['role'] ?? '';
-
-        if ($role === 'owner' || $role === 'admin') {
-            $this->laporanOwner();
-        } elseif ($role === 'kasir' || $role === 'pegawai') {
-            $this->laporanPegawai();
-        } else {
-            header('Location: index.php?controller=auth&action=login');
-            exit;
+        if ($role === 'kasir') {
+            $this->dashboard_pegawai();
+            return;
         }
+
+        header('Location: index.php?controller=auth&action=login');
+        exit;
     }
 }

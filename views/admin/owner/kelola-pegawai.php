@@ -3,20 +3,21 @@
 // views/owner/kelola-pegawai.php
 // Tampilan Kelola Akun Admin, Super Admin, dan Pegawai - KolegaOps POS
 
-$isSuperAdmin = $isSuperAdmin ?? false;
-$isAdmin      = $isAdmin ?? !$isSuperAdmin;
+$isSuperAdmin = $isSuperAdmin ?? (current_user('role') === 'super_admin');
+$isOwner      = $isOwner ?? (current_user('role') === 'owner');
 
 $daftarPegawai = $daftarPegawai ?? [];
 
 $roleLabelHalaman = $isSuperAdmin
     ? 'Super Admin'
-    : 'Admin · Pemilik Warkop';
+    : 'Owner · Pemilik Warkop';
 
 // Hitung statistik berdasarkan akun yang memang boleh dilihat.
 $totalAkun = count($daftarPegawai);
 $totalAktif = 0;
 $totalNonaktif = 0;
 $totalSuperAdmin = 0;
+$totalOwner = 0;
 $totalAdmin = 0;
 $totalKasir = 0;
 
@@ -35,7 +36,9 @@ foreach ($daftarPegawai as $akun) {
 
     if ($rawRole === 'super_admin') {
         $totalSuperAdmin++;
-    } elseif (in_array($rawRole, ['admin', 'owner'], true)) {
+    } elseif ($rawRole === 'owner') {
+        $totalOwner++;
+    } elseif ($rawRole === 'admin') {
         $totalAdmin++;
     } elseif (in_array($rawRole, ['kasir', 'pegawai'], true)) {
         $totalKasir++;
@@ -46,14 +49,10 @@ $namaAktifTeks = !empty($namaAktif)
     ? implode(', ', $namaAktif)
     : '-';
 
-if ($isSuperAdmin) {
-    $jumlahAkunRole = $totalSuperAdmin . ' Super Admin · '
-        . $totalAdmin . ' Admin · '
-        . $totalKasir . ' Pegawai';
-} else {
-    $jumlahAkunRole = $totalSuperAdmin . ' Super Admin · '
-        . $totalKasir . ' Pegawai';
-}
+$jumlahAkunRole = $totalSuperAdmin . ' Super Admin · '
+    . $totalOwner . ' Owner · '
+    . $totalAdmin . ' Admin · '
+    . $totalKasir . ' Kasir';
 
 if (!function_exists('escapeKelolaPegawai')) {
     function escapeKelolaPegawai($value): string
@@ -212,12 +211,9 @@ if (!function_exists('escapeKelolaPegawai')) {
                 >
                     <option value="">Semua role</option>
                     <option value="Super Admin">Super Admin</option>
-
-                    <?php if ($isSuperAdmin): ?>
-                        <option value="Admin">Admin</option>
-                    <?php endif; ?>
-
-                    <option value="Pegawai">Pegawai</option>
+                    <option value="Owner">Owner</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Kasir">Kasir</option>
                 </select>
             </div>
 
@@ -299,20 +295,17 @@ if (!function_exists('escapeKelolaPegawai')) {
                                     $statusPegawai = (string) ($peg['status'] ?? 'Nonaktif');
 
                                     $isProtectedSuperAdmin = ($rawRole === 'super_admin');
-
-                                    $isTargetAdmin = in_array(
-                                        $rawRole,
-                                        ['admin', 'owner'],
-                                        true
-                                    );
+                                    $isTargetOwner = ($rawRole === 'owner');
+                                    $isTargetAdmin = ($rawRole === 'admin');
+                                    $isTargetKasir = in_array($rawRole, ['kasir', 'pegawai'], true);
 
                                     // Akun Super Admin tidak boleh dikelola siapa pun.
-                                    // Super Admin dapat mengelola Admin dan Pegawai.
-                                    // Admin hanya dapat mengelola Pegawai.
+                                    // Super Admin dapat mengelola Owner, Admin, dan Kasir.
+                                    // Owner dapat mengelola Admin dan Kasir.
                                     $bolehKelola = !$isProtectedSuperAdmin
                                         && (
                                             $isSuperAdmin
-                                            || (!$isTargetAdmin && $isAdmin)
+                                            || ($isOwner && in_array($rawRole, ['admin', 'kasir', 'pegawai'], true))
                                         );
                                 ?>
 
@@ -343,13 +336,17 @@ if (!function_exists('escapeKelolaPegawai')) {
                                             <span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 px-3 py-1 rounded-lg text-xs font-bold">
                                                 Super Admin
                                             </span>
+                                        <?php elseif ($isTargetOwner): ?>
+                                            <span class="inline-flex items-center gap-1 bg-purple-100 text-purple-800 px-3 py-1 rounded-lg text-xs font-bold">
+                                                Owner
+                                            </span>
                                         <?php elseif ($isTargetAdmin): ?>
-                                            <span class="text-brand-navy font-bold">
+                                            <span class="inline-flex items-center gap-1 bg-blue-100 text-brand-navy px-3 py-1 rounded-lg text-xs font-bold">
                                                 Admin
                                             </span>
                                         <?php else: ?>
-                                            <span class="text-slate-600">
-                                                Pegawai
+                                            <span class="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-xs font-semibold">
+                                                Kasir
                                             </span>
                                         <?php endif; ?>
                                     </td>
@@ -441,8 +438,8 @@ if (!function_exists('escapeKelolaPegawai')) {
             <?php if ($isSuperAdmin): ?>
 
                 <p>
-                    Super Admin dapat melihat seluruh akun serta mengelola
-                    akun Admin dan Pegawai/Kasir. Seluruh akun Super Admin
+                    Super Admin memiliki otoritas penuh melihat seluruh akun serta mengelola
+                    akun Owner, Admin, dan Kasir. Seluruh akun Super Admin
                     bersifat terlindungi dan tidak dapat diedit, dinonaktifkan,
                     atau dihapus melalui halaman ini.
                 </p>
@@ -450,10 +447,9 @@ if (!function_exists('escapeKelolaPegawai')) {
             <?php else: ?>
 
                 <p>
-                    Admin dapat melihat akun Super Admin sebagai informasi,
-                    tetapi tidak dapat mengubah, menonaktifkan, atau menghapusnya.
-                    Admin hanya dapat mengelola akun Pegawai/Kasir dan tidak
-                    dapat melihat atau mengelola akun Admin lainnya.
+                    Owner memiliki wewenang untuk mengelola akun Admin dan Kasir.
+                    Seluruh akun Super Admin bersifat terlindungi dan tidak dapat diedit
+                    atau dihapus melalui form ini.
                 </p>
 
             <?php endif; ?>
@@ -547,10 +543,13 @@ if (!function_exists('escapeKelolaPegawai')) {
                         >
 
                             <?php if ($isSuperAdmin): ?>
-                                <option value="admin">Admin (Pemilik Warkop)</option>
+                                <option value="owner">Owner (Pemilik Bisnis)</option>
+                                <option value="admin">Admin (Operasional)</option>
+                            <?php else: ?>
+                                <option value="admin">Admin (Operasional)</option>
                             <?php endif; ?>
 
-                            <option value="kasir">Pegawai (Kasir)</option>
+                            <option value="kasir">Kasir (Pegawai)</option>
 
                         </select>
                     </div>
@@ -662,7 +661,9 @@ if (!function_exists('escapeKelolaPegawai')) {
 
                 const roleData = String(data.raw_role || data.role || '').toLowerCase();
 
-                if (roleData === 'owner' || roleData === 'admin') {
+                if (roleData === 'owner') {
+                    inputRole.value = 'owner';
+                } else if (roleData === 'admin') {
                     inputRole.value = 'admin';
                 } else {
                     inputRole.value = 'kasir';

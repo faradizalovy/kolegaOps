@@ -23,7 +23,7 @@ $pesanError = $pesanError ?? null;
 
 function formatAngkaStok($angka): string
 {
-    return number_format((float) $angka, 3, ',', '.');
+    return number_format((float) $angka, 1, ',', '.');
 }
 
 function eStok($value): string

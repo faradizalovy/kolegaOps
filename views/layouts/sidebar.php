@@ -7,18 +7,21 @@ $currentUser = current_user() ?? [];
 
 $namaUser = ucfirst((string) ($currentUser['username'] ?? 'Pengguna'));
 
-// Normalisasi role agar Super Admin, Admin, dan Kasir terbaca dengan benar.
-$roleUser = function_exists('normalize_role')
-    ? normalize_role((string) ($currentUser['role'] ?? 'kasir'))
-    : strtolower(trim((string) ($currentUser['role'] ?? 'kasir')));
+// Normalisasi role agar Super Admin, Owner, Admin, dan Kasir terbaca dengan benar.
+$roleUser = normalize_role((string) ($currentUser['role'] ?? 'kasir'));
 
-$isSuperAdmin = ($roleUser === 'super_admin');
-$isAdminArea = in_array($roleUser, ['super_admin', 'admin'], true);
+$isSuperAdmin       = ($roleUser === 'super_admin');
+$isOwner            = ($roleUser === 'owner');
+$isAdmin            = ($roleUser === 'admin');
+$isKasir            = ($roleUser === 'kasir');
+$canManageFullOwner = in_array($roleUser, ['super_admin', 'owner'], true);
+$isOperationalArea  = in_array($roleUser, ['super_admin', 'owner', 'admin'], true);
 
 $roleLabel = match ($roleUser) {
     'super_admin' => 'Super Admin',
-    'admin'       => 'Admin · Pemilik',
-    default       => 'Pegawai · Kasir',
+    'owner'       => 'Owner',
+    'admin'       => 'Admin',
+    default       => 'Kasir',
 };
 
 $inisialUser = strtoupper(substr($namaUser, 0, 2));
@@ -84,12 +87,12 @@ $curAction     = strtolower($_GET['action'] ?? '');
         <!-- NAVIGASI -->
         <nav class="p-4 space-y-2 text-sm font-medium">
 
-            <?php if ($isAdminArea): ?>
+            <?php if ($isOperationalArea): ?>
 
-                <!-- MENU SUPER ADMIN DAN ADMIN -->
+                <!-- MENU OPERASIONAL (SUPER ADMIN, OWNER, ADMIN) -->
 
-                <a href="index.php?controller=dashboard&action=dashboard_owner"
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curController === 'dashboard' && in_array($curAction, ['dashboard_owner', 'index'], true)) ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
+                <a href="index.php?controller=dashboard&action=dashboard_admin"
+                   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curController === 'dashboard' && in_array($curAction, ['dashboard_admin', 'index'], true)) ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
                     <svg class="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
@@ -121,7 +124,7 @@ $curAction     = strtolower($_GET['action'] ?? '');
                 </a>
 
                 <a href="index.php?controller=laporan&action=index"
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curController === 'laporan' && $curAction === 'index') ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
+                   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curController === 'laporan' && in_array($curAction, ['index', 'laporanadmin'], true)) ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"
                          viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -131,28 +134,34 @@ $curAction     = strtolower($_GET['action'] ?? '');
                     <span>Laporan</span>
                 </a>
 
-                <a href="index.php?controller=laporan&action=profit"
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curAction === 'profit') ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="23" height="23"
-                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 16v5"/><path d="M16 14.639V21"/><path d="M20 10.656V21"/>
-                        <path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"/>
-                        <path d="M4 18.463V21"/><path d="M8 14.656V21"/>
-                    </svg>
-                    <span>Analisis Profit</span>
-                </a>
+                <?php if ($canManageFullOwner): ?>
 
-                <a href="index.php?controller=pegawai&action=index"
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curController === 'pegawai' || $curController === 'user') ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                        <path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>
-                    </svg>
-                    <span>Kelola Akun</span>
-                </a>
+                    <!-- MENU KHUSUS SUPER ADMIN & OWNER: ANALISIS PROFIT & KELOLA AKUN -->
+
+                    <a href="index.php?controller=laporan&action=profit"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curAction === 'profit' || $curAction === 'analisisprofit') ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="23" height="23"
+                             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 16v5"/><path d="M16 14.639V21"/><path d="M20 10.656V21"/>
+                            <path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"/>
+                            <path d="M4 18.463V21"/><path d="M8 14.656V21"/>
+                        </svg>
+                        <span>Analisis Profit</span>
+                    </a>
+
+                    <a href="index.php?controller=pegawai&action=index"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl transition <?= ($curController === 'pegawai' || $curController === 'user') ? 'bg-blue-600 text-white font-bold shadow' : 'text-blue-200 hover:bg-blue-950/60' ?>">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                            <path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>
+                        </svg>
+                        <span>Kelola Akun</span>
+                    </a>
+
+                <?php endif; ?>    
 
             <?php else: ?>
 

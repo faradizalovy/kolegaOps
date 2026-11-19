@@ -34,7 +34,7 @@ class LaporanController
     /**
      * Menampilkan laporan keseluruhan untuk Super Admin dan Admin.
      */
-    public function laporanOwner(): void
+    public function laporanAdmin(): void
     {
         require_role(['super_admin', 'owner', 'admin']);
 
@@ -59,7 +59,7 @@ class LaporanController
         $waktuUpdate = date('H:i');
         $namaOwner   = ucfirst((string) current_user('username'));
 
-        require BASE_PATH . '/views/owner/laporan.php';
+        require BASE_PATH . '/views/admin/laporan.php';
     }
 
     /**
@@ -113,10 +113,11 @@ class LaporanController
 
     /**
      * Menampilkan analisis kontribusi profit menu.
+     * Khusus Super Admin dan Owner (Admin & Kasir dilarang).
      */
     public function profit(): void
     {
-        require_role(['super_admin', 'owner', 'admin']);
+        require_role(['super_admin', 'owner']);
 
         $filterTanggal  = $_GET['tanggal'] ?? date('Y-m-d');
         $filterKategori = $_GET['kategori'] ?? 'Semua';
@@ -137,7 +138,7 @@ class LaporanController
 
         $namaOwner = ucfirst((string) current_user('username'));
 
-        require BASE_PATH . '/views/owner/analisis-profit.php';
+        require BASE_PATH . '/views/admin/owner/analisis-profit.php';
     }
 
     /**
@@ -153,17 +154,12 @@ class LaporanController
      */
     public function index(): void
     {
-        if (!is_logged_in()) {
-            header('Location: index.php?controller=auth&action=login');
-            exit;
-        }
+        require_login();
 
-        $role = function_exists('normalize_role')
-            ? normalize_role((string) current_user('role'))
-            : strtolower(trim((string) current_user('role')));
+        $role = normalize_role((string) current_user('role'));
 
-        if (in_array($role, ['super_admin', 'admin'], true)) {
-            $this->laporanOwner();
+        if (in_array($role, ['super_admin', 'owner', 'admin'], true)) {
+            $this->laporanAdmin();
             return;
         }
 

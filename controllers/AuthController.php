@@ -88,6 +88,7 @@ class AuthController
 
             $allowedRoles = [
                 'super_admin',
+                'owner',
                 'admin',
                 'kasir'
             ];
@@ -137,11 +138,11 @@ class AuthController
 
         if (in_array(
             $roleClean,
-            ['super_admin', 'admin'],
+            ['super_admin', 'owner', 'admin'],
             true
         )) {
             header(
-                'Location: index.php?controller=dashboard&action=dashboard_owner'
+                'Location: index.php?controller=dashboard&action=dashboard_admin'
             );
             exit;
         }

@@ -30,13 +30,13 @@ $defaultAction     = 'login';
 
 if (!isset($_GET['controller']) && !isset($_GET['action'])) {
     if (is_logged_in()) {
-        $role = strtolower(current_user('role') ?? '');
+        $role = normalize_role((string) current_user('role'));
         if ($role === 'kasir') {
             $defaultController = 'dashboard';
             $defaultAction     = 'dashboard_pegawai';
         } else {
             $defaultController = 'dashboard';
-            $defaultAction     = 'dashboard_owner';
+            $defaultAction     = 'dashboard_admin';
         }
     }
 }

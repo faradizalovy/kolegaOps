@@ -20,8 +20,8 @@ class MenuController
      */
     public function index(): void
     {
-        // 1. Pengaman Hak Akses: Khusus Owner / Admin
-        require_role(['owner', 'admin']);
+        // 1. Pengaman Hak Akses: Super Admin, Owner, dan Admin
+        require_role(['super_admin', 'owner', 'admin']);
 
         // 2. Ambil data katalog produk riil dari PostgreSQL
         $daftarProduk = $this->menuModel->getAllMenu();
@@ -38,7 +38,7 @@ class MenuController
         $pesanError  = get_flash('error');
 
         // 4. Muat tampilan View
-        require_once BASE_PATH . '/views/owner/produk.php';
+        require_once BASE_PATH . '/views/admin/produk.php';
     }
 
     /**
@@ -46,6 +46,7 @@ class MenuController
      */
     public function tambah(): void
     {
+        require_role(['super_admin', 'owner', 'admin']);
         $this->form(null);
     }
 
@@ -56,6 +57,7 @@ class MenuController
      */
     public function edit($id = null): void
     {
+        require_role(['super_admin', 'owner', 'admin']);
         $this->form($id);
     }
 
@@ -66,8 +68,8 @@ class MenuController
      */
     public function form($id = null): void
     {
-        // 1. Pengaman Hak Akses: Khusus Owner / Admin
-        require_role(['owner', 'admin']);
+        // 1. Pengaman Hak Akses: Super Admin, Owner, dan Admin
+        require_role(['super_admin', 'owner', 'admin']);
 
         $id = (int) ($id ?? $_GET['id'] ?? 0);
         $isEdit = ($id > 0);
@@ -191,7 +193,7 @@ class MenuController
 
         $pesanError = get_flash('error');
 
-        require_once BASE_PATH . '/views/owner/form-produk.php';
+        require_once BASE_PATH . '/views/admin/form-produk.php';
     }
 
     /**
@@ -201,8 +203,8 @@ class MenuController
      */
     public function hapus($id = null): void
     {
-        // 1. Pengaman Hak Akses: Khusus Owner / Admin
-        require_role(['owner', 'admin']);
+        // 1. Pengaman Hak Akses: Super Admin, Owner, dan Admin
+        require_role(['super_admin', 'owner', 'admin']);
 
         $id = (int) ($id ?? $_GET['id'] ?? 0);
 

@@ -35,15 +35,7 @@ class UserController
     private function normalizeInputRole(string $role): string
     {
         $role = strtolower(trim($role));
-
-        if (in_array($role, ['owner', 'admin'], true)) {
-            return 'admin';
-        }
-
-        if (in_array($role, ['pegawai', 'kasir'], true)) {
-            return 'kasir';
-        }
-
+        
         return $role;
     }
 
@@ -76,16 +68,14 @@ class UserController
 
     /**
      * Menampilkan daftar akun sesuai hak akses pengguna.
+     * Hanya dapat diakses oleh Super Admin dan Owner.
      *
-     * Super Admin:
-     * - Melihat akun Admin dan Pegawai.
-     *
-     * Admin:
-     * - Hanya melihat akun Pegawai.
+     * Super Admin & Owner:
+     * - Melihat seluruh akun pengguna (Super Admin, Owner, Admin, Kasir).
      */
     public function index(): void
     {
-        require_role(['admin', 'owner']);
+        require_role(['super_admin', 'owner']);
 
         $actorRole = $this->getActorRole();
 
@@ -97,32 +87,39 @@ class UserController
 
         $totalAktif = count(array_filter(
             $daftarPegawai,
-            fn($u) => ($u['status'] ?? '') === 'Aktif'
+            fn($u) => strtolower($u['status'] ?? '') === 'aktif'
         ));
 
         $totalNonaktif = count(array_filter(
             $daftarPegawai,
-            fn($u) => ($u['status'] ?? '') === 'Nonaktif'
+            fn($u) => strtolower($u['status'] ?? '') === 'nonaktif'
+        ));
+
+        $totalSuperAdmin = count(array_filter(
+            $daftarPegawai,
+            fn($u) => ($u['raw_role'] ?? '') === 'super_admin'
+        ));
+
+        $totalOwner = count(array_filter(
+            $daftarPegawai,
+            fn($u) => ($u['raw_role'] ?? '') === 'owner'
         ));
 
         $totalAdmin = count(array_filter(
             $daftarPegawai,
-            fn($u) => ($u['role'] ?? '') === 'Admin'
+            fn($u) => ($u['raw_role'] ?? '') === 'admin'
         ));
 
         $totalKasir = count(array_filter(
             $daftarPegawai,
-            fn($u) => ($u['role'] ?? '') === 'Pegawai'
+            fn($u) => in_array($u['raw_role'] ?? '', ['kasir', 'pegawai'], true)
         ));
-
-        // Untuk kompatibilitas dengan view lama.
-        $totalOwner = $totalAdmin;
 
         // Daftar pengguna aktif.
         $namaAktifArr = array_column(
             array_filter(
                 $daftarPegawai,
-                fn($u) => ($u['status'] ?? '') === 'Aktif'
+                fn($u) => strtolower($u['status'] ?? '') === 'aktif'
             ),
             'nama'
         );
@@ -133,13 +130,14 @@ class UserController
 
         // Informasi role yang sedang login untuk kebutuhan view.
         $isSuperAdmin = ($actorRole === 'super_admin');
-        $isAdmin = ($actorRole === 'admin');
+        $isOwner      = ($actorRole === 'owner');
+        $isAdmin      = false; // Admin tidak punya akses ke halaman ini
 
         // Notifikasi.
         $pesanSukses = get_flash('success');
         $pesanError = get_flash('error');
 
-        require BASE_PATH . '/views/owner/kelola-pegawai.php';
+        require BASE_PATH . '/views/admin/owner/kelola-pegawai.php';
     }
 
     // -------------------------------------------------------------------------
@@ -148,10 +146,11 @@ class UserController
 
     /**
      * Memproses tambah akun baru atau memperbarui akun.
+     * Hanya Super Admin dan Owner yang berwenang.
      */
     public function simpan(): void
     {
-        require_role(['admin', 'owner']);
+        require_role(['super_admin', 'owner']);
 
         $this->verifyPostRequest();
 
@@ -178,18 +177,13 @@ class UserController
             $this->redirectIndex();
         }
 
-        // Validasi role.
-        if (!in_array($role, ['admin', 'kasir'], true)) {
-            set_flash('error', 'Role akun yang dipilih tidak valid!');
-            $this->redirectIndex();
-        }
+        // Validasi role input
+        $allowedInputRoles = ($actorRole === 'super_admin')
+            ? ['owner', 'admin', 'kasir']
+            : ['admin', 'kasir'];
 
-        // Admin hanya boleh mengelola Pegawai/Kasir.
-        if ($actorRole === 'admin' && $role !== 'kasir') {
-            set_flash(
-                'error',
-                'Admin hanya diperbolehkan mengelola akun Pegawai/Kasir!'
-            );
+        if (!in_array($role, $allowedInputRoles, true)) {
+            set_flash('error', 'Role akun yang dipilih tidak valid atau Anda tidak memiliki hak untuk menetapkan role tersebut!');
             $this->redirectIndex();
         }
 
@@ -225,7 +219,7 @@ class UserController
 
             $targetRole = normalize_role((string) ($target['role'] ?? ''));
 
-            // Akun Super Admin tidak boleh diedit.
+            // Akun Super Admin tidak boleh diedit lewat form ini.
             if ($targetRole === 'super_admin') {
                 set_flash(
                     'error',
@@ -234,14 +228,11 @@ class UserController
                 $this->redirectIndex();
             }
 
-            // Admin hanya dapat mengedit Pegawai.
-            if (
-                $actorRole === 'admin'
-                && $targetRole !== 'kasir'
-            ) {
+            // Owner hanya dapat mengedit akun Admin dan Kasir
+            if ($actorRole === 'owner' && !in_array($targetRole, ['admin', 'kasir'], true)) {
                 set_flash(
                     'error',
-                    'Admin hanya dapat mengubah akun Pegawai/Kasir!'
+                    'Owner hanya diperbolehkan mengubah akun Admin dan Kasir!'
                 );
                 $this->redirectIndex();
             }
@@ -345,18 +336,11 @@ class UserController
 
     /**
      * Menghapus akun sesuai hak akses.
-     *
-     * Super Admin:
-     * - Dapat menghapus Admin dan Pegawai.
-     *
-     * Admin:
-     * - Hanya dapat menghapus Pegawai.
-     *
-     * Akun Super Admin tidak dapat dihapus.
+     * Hanya Super Admin dan Owner yang berwenang.
      */
     public function hapus($id = null): void
     {
-        require_role(['admin', 'owner']);
+        require_role(['super_admin', 'owner']);
 
         $id = (int) ($id ?? $_GET['id'] ?? 0);
 
@@ -397,11 +381,11 @@ class UserController
             $this->redirectIndex();
         }
 
-        // Admin tidak boleh menghapus Admin.
-        if ($actorRole === 'admin' && $targetRole !== 'kasir') {
+        // Owner tidak boleh menghapus sesama Owner atau Super Admin.
+        if ($actorRole === 'owner' && !in_array($targetRole, ['admin', 'kasir'], true)) {
             set_flash(
                 'error',
-                'Admin hanya diperbolehkan menghapus akun Pegawai/Kasir!'
+                'Owner hanya diperbolehkan menghapus akun Admin dan Kasir!'
             );
             $this->redirectIndex();
         }
