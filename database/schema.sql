@@ -14,6 +14,9 @@
 -- =============================================================================
 
 DROP TABLE IF EXISTS riwayat_stok CASCADE;
+DROP TABLE IF EXISTS detail_kustomisasi_transaksi CASCADE;
+DROP TABLE IF EXISTS detail_opsi_kustomisasi CASCADE;
+DROP TABLE IF EXISTS opsi_kustomisasi CASCADE;
 DROP TABLE IF EXISTS detail_transaksi CASCADE;
 DROP TABLE IF EXISTS transaksi CASCADE;
 DROP TABLE IF EXISTS resep CASCADE;
@@ -227,7 +230,85 @@ CREATE INDEX idx_detail_id_menu
 
 
 -- =============================================================================
--- 10. TABEL RIWAYAT_STOK (RIWAYAT PERUBAHAN STOK BAHAN BAKU)
+-- 10. TABEL OPSI_KUSTOMISASI (KELOMPOK KUSTOMISASI SETIAP PRODUK)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.opsi_kustomisasi (
+    id_opsi SERIAL PRIMARY KEY,
+    id_menu INTEGER NOT NULL,
+    nama_opsi VARCHAR(100) NOT NULL,
+    tipe_pilihan VARCHAR(20) NOT NULL DEFAULT 'single',
+    wajib_dipilih BOOLEAN NOT NULL DEFAULT FALSE,
+    urutan INTEGER NOT NULL DEFAULT 0,
+    status BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_opsi_menu
+        FOREIGN KEY (id_menu)
+        REFERENCES public.menu(id_menu)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_tipe_pilihan
+        CHECK (tipe_pilihan IN ('single', 'multiple'))
+);
+
+
+-- =============================================================================
+-- 11. TABEL DETAIL_OPSI_KUSTOMISASI (PILIHAN DALAM SETIAP KELOMPOK)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.detail_opsi_kustomisasi (
+    id_detail_opsi SERIAL PRIMARY KEY,
+    id_opsi INTEGER NOT NULL,
+    nama_pilihan VARCHAR(100) NOT NULL,
+    harga_tambahan NUMERIC(12,2) NOT NULL DEFAULT 0,
+    urutan INTEGER NOT NULL DEFAULT 0,
+    status BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_detail_opsi
+        FOREIGN KEY (id_opsi)
+        REFERENCES public.opsi_kustomisasi(id_opsi)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_harga_tambahan
+        CHECK (harga_tambahan >= 0)
+);
+
+
+-- =============================================================================
+-- 12. TABEL DETAIL_KUSTOMISASI_TRANSAKSI
+-- (PILIHAN KUSTOMISASI YANG TERSIMPAN PADA TRANSAKSI)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.detail_kustomisasi_transaksi (
+    id_detail_kustomisasi SERIAL PRIMARY KEY,
+    id_detail INTEGER NOT NULL,
+    nama_kelompok VARCHAR(100) NOT NULL,
+    nama_pilihan VARCHAR(100) NOT NULL,
+    harga_tambahan NUMERIC(12,2) NOT NULL DEFAULT 0,
+
+    CONSTRAINT fk_kustomisasi_detail_transaksi
+        FOREIGN KEY (id_detail)
+        REFERENCES public.detail_transaksi(id_detail)
+        ON DELETE CASCADE
+);
+
+
+-- =============================================================================
+-- 13. INDEX TABEL KUSTOMISASI
+-- =============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_opsi_kustomisasi_menu
+    ON public.opsi_kustomisasi(id_menu);
+
+CREATE INDEX IF NOT EXISTS idx_detail_opsi_kustomisasi
+    ON public.detail_opsi_kustomisasi(id_opsi);
+
+CREATE INDEX IF NOT EXISTS idx_kustomisasi_transaksi_detail
+    ON public.detail_kustomisasi_transaksi(id_detail);
+
+
+-- =============================================================================
+-- 14. TABEL RIWAYAT_STOK (RIWAYAT PERUBAHAN STOK BAHAN BAKU)
 -- =============================================================================
 
 CREATE TABLE riwayat_stok (
@@ -286,7 +367,7 @@ CREATE INDEX idx_riwayat_stok_create_at
 
 
 -- =============================================================================
--- 11. DATA AWAL USERS
+-- 15. DATA AWAL USERS
 -- =============================================================================
 
 -- Password menggunakan hash bcrypt.
@@ -321,7 +402,7 @@ ON CONFLICT (username) DO NOTHING;
 
 
 -- =============================================================================
--- 12. DATA AWAL BAHAN BAKU
+-- 16. DATA AWAL BAHAN BAKU
 -- =============================================================================
 
 INSERT INTO bahan_baku
@@ -340,7 +421,7 @@ ON CONFLICT (id_bahan) DO NOTHING;
 
 
 -- =============================================================================
--- 13. DATA AWAL MENU
+-- 17. DATA AWAL MENU
 -- =============================================================================
 
 INSERT INTO menu
@@ -356,7 +437,7 @@ ON CONFLICT (id_menu) DO NOTHING;
 
 
 -- =============================================================================
--- 14. DATA RESEP (KOMPOSISI BAHAN BAKU SETIAP MENU)
+-- 18. DATA RESEP (KOMPOSISI BAHAN BAKU SETIAP MENU)
 -- =============================================================================
 
 INSERT INTO resep
