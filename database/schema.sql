@@ -3,15 +3,13 @@
 -- KOLEGAOPS - DATABASE SCHEMA (POSTGRESQL)
 -- Aplikasi Point of Sales (POS) Warkop "KolegaOps"
 -- =============================================================================
-
 -- PERHATIAN:
 -- Script ini digunakan untuk membuat database baru dari awal.
 -- DROP TABLE akan menghapus tabel beserta seluruh datanya.
--- Jangan jalankan ulang pada database aktif yang masih digunakan.
+-- =============================================================================
 
--- =============================================================================
+
 -- 1. HAPUS TABEL LAMA
--- =============================================================================
 
 DROP TABLE IF EXISTS riwayat_stok CASCADE;
 DROP TABLE IF EXISTS detail_kustomisasi_transaksi CASCADE;
@@ -27,9 +25,7 @@ DROP TABLE IF EXISTS shift CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 
--- =============================================================================
--- 2. TABEL USERS (MASTER PENGGUNA / PEGAWAI)
--- =============================================================================
+-- 2. TABEL USERS
 
 CREATE TABLE users (
     id_user SERIAL PRIMARY KEY,
@@ -43,9 +39,7 @@ CREATE TABLE users (
 );
 
 
--- =============================================================================
--- 3. TABEL SHIFT (SESI OPERASIONAL KASIR)
--- =============================================================================
+-- 3. TABEL SHIFT
 
 CREATE TABLE shift (
     id_shift SERIAL PRIMARY KEY,
@@ -72,10 +66,12 @@ CREATE INDEX idx_shift_id_user ON shift(id_user);
 CREATE INDEX idx_shift_status ON shift(status);
 CREATE INDEX idx_shift_tanggal ON shift(tanggal);
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_satu_aktif_per_kasir
+    ON shift (id_user)
+    WHERE status = 'buka';
 
--- =============================================================================
--- 4. TABEL PENGELUARAN_SHIFT (PENGELUARAN OPERASIONAL)
--- =============================================================================
+
+-- 4. TABEL PENGELUARAN_SHIFT
 
 CREATE TABLE pengeluaran_shift (
     id_pengeluaran SERIAL PRIMARY KEY,
@@ -95,9 +91,7 @@ CREATE INDEX idx_pengeluaran_id_shift
     ON pengeluaran_shift(id_shift);
 
 
--- =============================================================================
--- 5. TABEL MENU (KATALOG PRODUK)
--- =============================================================================
+-- 5. TABEL MENU
 
 CREATE TABLE menu (
     id_menu SERIAL PRIMARY KEY,
@@ -116,9 +110,7 @@ CREATE INDEX idx_menu_kategori ON menu(kategori);
 CREATE INDEX idx_menu_status ON menu(status);
 
 
--- =============================================================================
--- 6. TABEL BAHAN_BAKU (INVENTARIS BAHAN MENTAH)
--- =============================================================================
+-- 6. TABEL BAHAN_BAKU
 
 CREATE TABLE bahan_baku (
     id_bahan SERIAL PRIMARY KEY,
@@ -132,9 +124,7 @@ CREATE TABLE bahan_baku (
 );
 
 
--- =============================================================================
--- 7. TABEL RESEP (KOMPOSISI BAHAN BAKU SETIAP MENU)
--- =============================================================================
+-- 7. TABEL RESEP
 
 CREATE TABLE resep (
     id_resep SERIAL PRIMARY KEY,
@@ -161,9 +151,7 @@ CREATE INDEX idx_resep_id_menu ON resep(id_menu);
 CREATE INDEX idx_resep_id_bahan ON resep(id_bahan);
 
 
--- =============================================================================
--- 8. TABEL TRANSAKSI (TRANSAKSI PENJUALAN POS)
--- =============================================================================
+-- 8. TABEL TRANSAKSI
 
 CREATE TABLE transaksi (
     id_transaksi SERIAL PRIMARY KEY,
@@ -198,9 +186,7 @@ CREATE INDEX idx_transaksi_kode ON transaksi(kode_transaksi);
 CREATE INDEX idx_transaksi_create_at ON transaksi(create_at);
 
 
--- =============================================================================
--- 9. TABEL DETAIL_TRANSAKSI (RINCIAN ITEM PENJUALAN)
--- =============================================================================
+-- 9. TABEL DETAIL_TRANSAKSI
 
 CREATE TABLE detail_transaksi (
     id_detail SERIAL PRIMARY KEY,
@@ -229,9 +215,7 @@ CREATE INDEX idx_detail_id_menu
     ON detail_transaksi(id_menu);
 
 
--- =============================================================================
--- 10. TABEL OPSI_KUSTOMISASI (KELOMPOK KUSTOMISASI SETIAP PRODUK)
--- =============================================================================
+-- 10. TABEL OPSI_KUSTOMISASI
 
 CREATE TABLE IF NOT EXISTS public.opsi_kustomisasi (
     id_opsi SERIAL PRIMARY KEY,
@@ -252,9 +236,7 @@ CREATE TABLE IF NOT EXISTS public.opsi_kustomisasi (
 );
 
 
--- =============================================================================
--- 11. TABEL DETAIL_OPSI_KUSTOMISASI (PILIHAN DALAM SETIAP KELOMPOK)
--- =============================================================================
+-- 11. TABEL DETAIL_OPSI_KUSTOMISASI
 
 CREATE TABLE IF NOT EXISTS public.detail_opsi_kustomisasi (
     id_detail_opsi SERIAL PRIMARY KEY,
@@ -274,10 +256,7 @@ CREATE TABLE IF NOT EXISTS public.detail_opsi_kustomisasi (
 );
 
 
--- =============================================================================
 -- 12. TABEL DETAIL_KUSTOMISASI_TRANSAKSI
--- (PILIHAN KUSTOMISASI YANG TERSIMPAN PADA TRANSAKSI)
--- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.detail_kustomisasi_transaksi (
     id_detail_kustomisasi SERIAL PRIMARY KEY,
@@ -293,9 +272,7 @@ CREATE TABLE IF NOT EXISTS public.detail_kustomisasi_transaksi (
 );
 
 
--- =============================================================================
 -- 13. INDEX TABEL KUSTOMISASI
--- =============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_opsi_kustomisasi_menu
     ON public.opsi_kustomisasi(id_menu);
@@ -307,14 +284,13 @@ CREATE INDEX IF NOT EXISTS idx_kustomisasi_transaksi_detail
     ON public.detail_kustomisasi_transaksi(id_detail);
 
 
--- =============================================================================
--- 14. TABEL RIWAYAT_STOK (RIWAYAT PERUBAHAN STOK BAHAN BAKU)
--- =============================================================================
+-- 14. TABEL RIWAYAT_STOK
 
 CREATE TABLE riwayat_stok (
     id_riwayat SERIAL PRIMARY KEY,
 
     id_bahan INTEGER NULL,
+    id_menu INTEGER NULL,
     id_user INTEGER NULL,
     id_transaksi INTEGER NULL,
 
@@ -342,6 +318,11 @@ CREATE TABLE riwayat_stok (
         REFERENCES bahan_baku(id_bahan)
         ON DELETE SET NULL,
 
+    CONSTRAINT fk_riwayat_stok_menu
+        FOREIGN KEY (id_menu)
+        REFERENCES menu(id_menu)
+        ON DELETE SET NULL,
+
     CONSTRAINT fk_riwayat_stok_user
         FOREIGN KEY (id_user)
         REFERENCES users(id_user)
@@ -356,6 +337,9 @@ CREATE TABLE riwayat_stok (
 CREATE INDEX idx_riwayat_stok_bahan
     ON riwayat_stok(id_bahan);
 
+CREATE INDEX idx_riwayat_stok_menu
+    ON riwayat_stok(id_menu);
+
 CREATE INDEX idx_riwayat_stok_user
     ON riwayat_stok(id_user);
 
@@ -366,12 +350,7 @@ CREATE INDEX idx_riwayat_stok_create_at
     ON riwayat_stok(create_at DESC);
 
 
--- =============================================================================
 -- 15. DATA AWAL USERS
--- =============================================================================
-
--- Password menggunakan hash bcrypt.
--- Akun Super Admin dibuat melalui fitur pembuatan akun Super Admin aplikasi.
 
 INSERT INTO users (username, password, role, status) VALUES
 (
@@ -401,9 +380,7 @@ INSERT INTO users (username, password, role, status) VALUES
 ON CONFLICT (username) DO NOTHING;
 
 
--- =============================================================================
 -- 16. DATA AWAL BAHAN BAKU
--- =============================================================================
 
 INSERT INTO bahan_baku
     (id_bahan, nama_bahan, stok_bahan, satuan, minimum_stok, status_stok)
@@ -420,9 +397,7 @@ VALUES
 ON CONFLICT (id_bahan) DO NOTHING;
 
 
--- =============================================================================
 -- 17. DATA AWAL MENU
--- =============================================================================
 
 INSERT INTO menu
     (id_menu, nama_menu, kategori, harga, hpp, stok_menu, status)
@@ -436,36 +411,33 @@ VALUES
 ON CONFLICT (id_menu) DO NOTHING;
 
 
--- =============================================================================
--- 18. DATA RESEP (KOMPOSISI BAHAN BAKU SETIAP MENU)
--- =============================================================================
+-- 18. DATA RESEP
 
 INSERT INTO resep
     (id_menu, id_bahan, jumlah_pemakaian)
 VALUES
-    -- 1. Kopi Hitam Tubruk
     (1, 1, 15.00),
     (1, 3, 10.00),
 
-    -- 2. Kopi Susu Tradisional
     (2, 1, 15.00),
     (2, 2, 30.00),
     (2, 3, 5.00),
 
-    -- 3. Es Teh Manis
     (3, 4, 10.00),
     (3, 3, 20.00),
 
-    -- 4. Es Coklat Warkop
     (4, 7, 35.00),
     (4, 2, 25.00),
 
-    -- 5. Mie Goreng + Telur
     (5, 5, 1.00),
     (5, 6, 1.00),
 
-    -- 6. Roti Bakar Coklat Keju
     (6, 8, 2.00),
     (6, 9, 30.00)
 
 ON CONFLICT (id_menu, id_bahan) DO NOTHING;
+
+
+-- =============================================================================
+-- SELESAI
+-- =============================================================================

@@ -1,22 +1,24 @@
 
 <?php
 // views/pegawai/dashboard.php
-// Tampilan Dashboard Pegawai & Kasir Warkop Kolega - KolegaOps POS
+// Dashboard Pegawai & Kasir KolegaOps
 
 $shiftAda = !empty($shiftAktif);
 $shiftBerjalan = $shiftAda && ($shiftAktif['status'] ?? '') === 'buka';
 
 $namaShift = $shiftAktif['nama_shift'] ?? 'Belum Ada Shift';
 
-$waktuBuka = !empty($shiftAktif['waktu_buka'])
-    ? date('H:i', strtotime($shiftAktif['waktu_buka']))
-    : '-';
+$namaPembukaShift = ucfirst(
+    (string) ($shiftAktif['nama_kasir'] ?? 'Kasir')
+);
 
-$waktuTutup = !empty($shiftAktif['waktu_tutup'])
-    ? date('H:i', strtotime($shiftAktif['waktu_tutup']))
-    : ($shiftBerjalan ? 'Berjalan' : '-');
+$jumlahStokKritis = is_array($stokKritis ?? null)
+    ? count($stokKritis)
+    : 0;
 
-$formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
+$idShift = $shiftBerjalan
+    ? (int) ($shiftAktif['id_shift'] ?? 0)
+    : 0;
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -50,7 +52,7 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
 
   <main class="flex-1 min-w-0 p-8 overflow-y-auto min-h-screen">
 
-    <!-- Header Halaman -->
+    <!-- Header -->
     <header class="flex items-center justify-between pb-5 border-b border-slate-200 mb-6 bg-white px-8 py-5 rounded-2xl shadow-sm">
       <div>
         <h2 class="text-2xl font-extrabold text-slate-900">Dashboard</h2>
@@ -64,7 +66,7 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
       </div>
     </header>
 
-    <!-- Notifikasi Flash -->
+    <!-- Notifikasi -->
     <?php if (!empty($pesanSukses)): ?>
       <div class="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-xs">
         <?= htmlspecialchars($pesanSukses) ?>
@@ -77,7 +79,7 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
       </div>
     <?php endif; ?>
 
-    <!-- Kartu Statistik -->
+    <!-- Statistik -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
 
       <!-- Penjualan Hari Ini -->
@@ -99,7 +101,7 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
         </p>
       </div>
 
-      <!-- Penjualan Shift Saya -->
+      <!-- Penjualan Shift Kasir -->
       <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
         <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">
           PENJUALAN SHIFT SAYA
@@ -126,7 +128,7 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
 
         <div class="my-2">
           <h3 class="text-3xl font-extrabold text-orange-800">
-            <?= count($stokKritis) ?> bahan
+            <?= $jumlahStokKritis ?> bahan
           </h3>
         </div>
 
@@ -137,78 +139,76 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
 
     </div>
 
-    <!-- Grid Konten -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
       <!-- Kolom Kiri -->
       <div class="lg:col-span-7 space-y-6">
 
-        <!-- Status Shift -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <!-- Status Shift Bersama -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
 
-          <div>
-            <div class="flex flex-wrap items-center gap-3">
-              <h3 class="font-extrabold text-slate-900 text-base">
-                Shift <?= htmlspecialchars($namaShift) ?>
-              </h3>
+          <?php if ($shiftBerjalan): ?>
 
-              <?php if ($shiftAda): ?>
-                <span class="text-xs text-slate-400 font-semibold">
-                  <?= htmlspecialchars($formatWaktuShift) ?>
-                </span>
-              <?php else: ?>
-                <span class="text-xs text-slate-400 font-semibold">
-                  Belum ada waktu shift
-                </span>
-              <?php endif; ?>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+
+              <div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <h3 class="font-extrabold text-slate-900 text-base">
+                    Shift <?= htmlspecialchars($namaShift) ?>
+                  </h3>
+
+                  <span class="bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 rounded-full text-xs">
+                    Aktif Berjalan
+                  </span>
+                </div>
+
+                <p class="text-xs text-slate-600 mt-2 font-medium">
+                  Dibuka oleh <?= htmlspecialchars($namaPembukaShift) ?>
+                </p>
+
+                <p class="text-xs text-slate-500 mt-1">
+                  Semua kasir dapat bertugas pada shift ini.
+                </p>
+
+                <?php if (!empty($shiftAktif['waktu_buka'])): ?>
+                  <p class="text-xs text-slate-400 mt-1">
+                    Dibuka pukul
+                    <?= htmlspecialchars(date('H:i', strtotime($shiftAktif['waktu_buka']))) ?>
+                  </p>
+                <?php endif; ?>
+              </div>
+
+              <button
+                type="button"
+                onclick="bukaModalKonfirmasiTutup()"
+                class="rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 text-xs font-bold shadow transition">
+                Tutup Shift
+              </button>
+
             </div>
 
-            <p class="text-xs text-slate-600 mt-1 font-medium">
-              <?php if ($shiftBerjalan): ?>
-                <?= htmlspecialchars($namaKasir) ?> sedang bertugas
-              <?php elseif ($shiftAda): ?>
-                Shift telah ditutup dan direkap
-              <?php else: ?>
-                Belum ada shift yang dibuka hari ini
-              <?php endif; ?>
-            </p>
-          </div>
+          <?php else: ?>
 
-          <div>
-            <?php if ($shiftBerjalan): ?>
-              <div class="flex items-center flex-wrap gap-3">
-                <span class="bg-emerald-100 text-emerald-700 font-bold px-3.5 py-1.5 rounded-full text-xs">
-                  Aktif Berjalan
+            <div class="mb-5">
+              <div class="flex items-center gap-3">
+                <h3 class="font-extrabold text-slate-900 text-base">
+                  Shift Belum Dibuka
+                </h3>
+
+                <span class="bg-amber-100 text-amber-700 font-bold px-3 py-1.5 rounded-full text-xs">
+                  Belum Aktif
                 </span>
-
-                <button
-                  type="button"
-                  onclick="bukaModalKonfirmasiTutup()"
-                  class="rounded-xl bg-brand-navy hover:bg-brand-lightNavy text-white px-4 py-2.5 text-xs font-bold shadow transition cursor-pointer">
-                  Tutup Shift
-                </button>
               </div>
+            </div>
 
-            <?php elseif ($shiftAda): ?>
-              <div class="flex items-center flex-wrap gap-3">
-                <span class="bg-slate-100 text-slate-600 font-bold px-3.5 py-1.5 rounded-full text-xs">
-                  Sudah Ditutup &bull;
-                  Saldo Rp <?= number_format((float) ($shiftAktif['saldo_akhir'] ?? 0), 0, ',', '.') ?>
-                </span>
+            <button
+              type="button"
+              onclick="bukaModalKonfirmasiBuka()"
+              class="w-full sm:w-auto rounded-xl bg-brand-navy hover:bg-brand-lightNavy text-white px-6 py-3 text-xs font-bold shadow transition">
+              Buka Shift Sekarang
+            </button>
 
-                <a
-                  href="index.php?controller=laporan&action=laporanPegawai"
-                  class="rounded-xl bg-brand-navy text-white px-4 py-2.5 text-xs font-bold shadow hover:bg-brand-lightNavy transition">
-                  Lihat Laporan
-                </a>
-              </div>
-
-            <?php else: ?>
-              <span class="bg-slate-100 text-slate-600 font-bold px-3.5 py-1.5 rounded-full text-xs">
-                Belum Dibuka
-              </span>
-            <?php endif; ?>
-          </div>
+          <?php endif; ?>
 
         </div>
 
@@ -227,52 +227,54 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
             </a>
           </div>
 
-          <table class="w-full text-left text-sm">
-            <thead class="bg-brand-darkNavy text-white text-xs uppercase tracking-wider">
-              <tr>
-                <th class="p-3.5 pl-6">WAKTU</th>
-                <th class="p-3.5">NOMOR TRANSAKSI</th>
-                <th class="p-3.5">TOTAL</th>
-                <th class="p-3.5 pr-6 text-right">STATUS</th>
-              </tr>
-            </thead>
-
-            <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-              <?php if (empty($transaksiTerbaru)): ?>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-brand-darkNavy text-white text-xs uppercase tracking-wider">
                 <tr>
-                  <td colspan="4" class="p-6 text-center text-slate-400 italic">
-                    Belum ada transaksi pada shift ini.
-                  </td>
+                  <th class="p-3.5 pl-6">WAKTU</th>
+                  <th class="p-3.5">NOMOR TRANSAKSI</th>
+                  <th class="p-3.5">TOTAL</th>
+                  <th class="p-3.5 pr-6 text-right">STATUS</th>
                 </tr>
-              <?php else: ?>
-                <?php foreach ($transaksiTerbaru as $trx): ?>
-                  <tr class="hover:bg-blue-50/50 transition">
-                    <td class="p-3.5 pl-6 text-slate-500">
-                      <?= htmlspecialchars($trx['waktu']) ?>
-                    </td>
+              </thead>
 
-                    <td class="p-3.5 font-bold text-brand-navy">
-                      <?= htmlspecialchars($trx['kode_transaksi']) ?>
-                    </td>
-
-                    <td class="p-3.5 font-extrabold">
-                      Rp <?= number_format((float) $trx['total'], 0, ',', '.') ?>
-                    </td>
-
-                    <td class="p-3.5 pr-6 text-right">
-                      <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg font-bold text-xs inline-block">
-                        Lunas
-                      </span>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
+                <?php if (empty($transaksiTerbaru)): ?>
+                  <tr>
+                    <td colspan="4" class="p-6 text-center text-slate-400 italic">
+                      Belum ada transaksi.
                     </td>
                   </tr>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </tbody>
-          </table>
+                <?php else: ?>
+                  <?php foreach ($transaksiTerbaru as $trx): ?>
+                    <tr class="hover:bg-blue-50/50 transition">
+                      <td class="p-3.5 pl-6 text-slate-500">
+                        <?= htmlspecialchars($trx['waktu']) ?>
+                      </td>
+
+                      <td class="p-3.5 font-bold text-brand-navy">
+                        <?= htmlspecialchars($trx['kode_transaksi']) ?>
+                      </td>
+
+                      <td class="p-3.5 font-extrabold">
+                        Rp <?= number_format((float) $trx['total'], 0, ',', '.') ?>
+                      </td>
+
+                      <td class="p-3.5 pr-6 text-right">
+                        <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg font-bold text-xs inline-block">
+                          Lunas
+                        </span>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
 
         </div>
 
-        <!-- Pembayaran Shift Saya -->
+        <!-- Pembayaran Shift Kasir -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -334,94 +336,98 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
             </a>
           </div>
 
-          <table class="w-full text-left text-sm">
-            <thead class="bg-brand-darkNavy text-white text-xs uppercase tracking-wider">
-              <tr>
-                <th class="p-3 pl-6">BAHAN BAKU MENU</th>
-                <th class="p-3">SISA</th>
-                <th class="p-3 pr-6 text-right">MINIMUM</th>
-              </tr>
-            </thead>
-
-            <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-              <?php if (empty($stokKritis)): ?>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-brand-darkNavy text-white text-xs uppercase tracking-wider">
                 <tr>
-                  <td colspan="3" class="p-4 text-center text-slate-400 italic">
-                    Semua stok bahan dalam kondisi aman.
-                  </td>
+                  <th class="p-3 pl-6">BAHAN BAKU MENU</th>
+                  <th class="p-3">SISA</th>
+                  <th class="p-3 pr-6 text-right">MINIMUM</th>
                 </tr>
-              <?php else: ?>
-                <?php foreach (array_slice($stokKritis, 0, 4) as $s): ?>
-                  <tr class="hover:bg-amber-50/40 transition">
-                    <td class="p-3 pl-6 font-bold text-orange-600">
-                      <?= htmlspecialchars($s['nama_bahan']) ?>
-                    </td>
+              </thead>
 
-                    <td class="p-3 font-semibold">
-                      <?= number_format((float) $s['stok_bahan'], 0, ',', '.') ?>
-                      <?= htmlspecialchars($s['satuan']) ?>
-                    </td>
-
-                    <td class="p-3 pr-6 text-right text-slate-500">
-                      <?= number_format((float) $s['minimum_stok'], 0, ',', '.') ?>
-                      <?= htmlspecialchars($s['satuan']) ?>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
+                <?php if (empty($stokKritis)): ?>
+                  <tr>
+                    <td colspan="3" class="p-4 text-center text-slate-400 italic">
+                      Semua stok bahan dalam kondisi aman.
                     </td>
                   </tr>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </tbody>
-          </table>
+                <?php else: ?>
+                  <?php foreach (array_slice($stokKritis, 0, 4) as $s): ?>
+                    <tr class="hover:bg-amber-50/40 transition">
+                      <td class="p-3 pl-6 font-bold text-orange-600">
+                        <?= htmlspecialchars($s['nama_bahan']) ?>
+                      </td>
+
+                      <td class="p-3 font-semibold">
+                        <?= number_format((float) $s['stok_bahan'], 0, ',', '.') ?>
+                        <?= htmlspecialchars($s['satuan']) ?>
+                      </td>
+
+                      <td class="p-3 pr-6 text-right text-slate-500">
+                        <?= number_format((float) $s['minimum_stok'], 0, ',', '.') ?>
+                        <?= htmlspecialchars($s['satuan']) ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
 
         </div>
 
-        <!-- Pengeluaran Shift Saya -->
+        <!-- Pengeluaran Shift Bersama -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
           <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <h3 class="font-bold text-slate-900 text-base">
-              Pengeluaran shift saya
+              Pengeluaran shift
             </h3>
 
             <?php if ($shiftBerjalan): ?>
               <button
                 type="button"
                 onclick="bukaModalTambahPengeluaran()"
-                class="text-xs font-bold bg-brand-navy text-white px-3.5 py-2 rounded-xl shadow hover:bg-brand-lightNavy transition cursor-pointer">
+                class="text-xs font-bold bg-brand-navy text-white px-3.5 py-2 rounded-xl shadow hover:bg-brand-lightNavy transition">
                 Tambah Pengeluaran +
               </button>
             <?php endif; ?>
           </div>
 
-          <table class="w-full text-left text-sm">
-            <thead class="bg-brand-darkNavy text-white text-xs uppercase tracking-wider">
-              <tr>
-                <th class="p-3 pl-6">KETERANGAN KEPERLUAN</th>
-                <th class="p-3 pr-6 text-right">NOMINAL TUNAI</th>
-              </tr>
-            </thead>
-
-            <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-              <?php if (empty($pengeluaranShift)): ?>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-brand-darkNavy text-white text-xs uppercase tracking-wider">
                 <tr>
-                  <td colspan="2" class="p-4 text-center text-slate-400 italic">
-                    Belum ada pengeluaran dicatat pada shift ini.
-                  </td>
+                  <th class="p-3 pl-6">KETERANGAN KEPERLUAN</th>
+                  <th class="p-3 pr-6 text-right">NOMINAL</th>
                 </tr>
-              <?php else: ?>
-                <?php foreach ($pengeluaranShift as $p): ?>
-                  <tr>
-                    <td class="p-3 pl-6">
-                      <?= htmlspecialchars($p['keterangan']) ?>
-                    </td>
+              </thead>
 
-                    <td class="p-3 pr-6 text-right font-bold text-red-600">
-                      Rp <?= number_format((float) $p['nominal'], 0, ',', '.') ?>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
+                <?php if (empty($pengeluaranShift)): ?>
+                  <tr>
+                    <td colspan="2" class="p-4 text-center text-slate-400 italic">
+                      Belum ada pengeluaran dicatat pada shift ini.
                     </td>
                   </tr>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </tbody>
-          </table>
+                <?php else: ?>
+                  <?php foreach ($pengeluaranShift as $p): ?>
+                    <tr>
+                      <td class="p-3 pl-6">
+                        <?= htmlspecialchars($p['keterangan']) ?>
+                      </td>
+
+                      <td class="p-3 pr-6 text-right font-bold text-red-600">
+                        Rp <?= number_format((float) $p['nominal'], 0, ',', '.') ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
 
           <div class="p-3.5 px-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center font-bold text-xs">
             <span class="text-slate-700">
@@ -438,21 +444,76 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
       </div>
     </div>
 
+    <!-- Modal Konfirmasi Buka Shift -->
+    <?php if (!$shiftBerjalan): ?>
+    <div
+      id="modalKonfirmasiBuka"
+      class="fixed inset-0 bg-slate-950/50 hidden items-center justify-center z-50 p-4">
+
+      <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4">
+
+        <div class="mx-auto w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
+          <svg class="w-7 h-7 text-brand-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-extrabold text-slate-900">
+            Buka Shift?
+          </h3>
+
+          <p class="text-xs text-slate-500 mt-2">
+            Apakah kamu yakin ingin membuka shift sekarang?
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-2">
+
+          <button
+            type="button"
+            onclick="tutupModalKonfirmasiBuka()"
+            class="w-full py-2.5 font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition">
+            Batal
+          </button>
+
+          <form
+            action="index.php?controller=dashboard&action=bukaShift"
+            method="POST">
+
+            <?php if (function_exists('csrf_token')): ?>
+              <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+            <?php endif; ?>
+
+            <button
+              type="submit"
+              class="w-full py-2.5 font-bold text-white bg-brand-navy hover:bg-brand-lightNavy rounded-xl shadow transition">
+              Ya, Buka Shift
+            </button>
+
+          </form>
+
+        </div>
+
+      </div>
+    </div>
+    <?php endif; ?>
+
     <!-- Modal Tambah Pengeluaran -->
     <?php if ($shiftBerjalan): ?>
     <div
       id="modalPengeluaran"
       class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
 
-      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-xs space-y-4">
+      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-xs space-y-4">
 
         <div>
           <h3 class="text-lg font-extrabold text-slate-900">
             Catat Pengeluaran Shift
           </h3>
 
-          <p class="text-slate-500 mt-0.5">
-            Catat keperluan operasional tunai selama shift berlangsung.
+          <p class="text-slate-500 mt-1">
+            Catat keperluan operasional selama shift berlangsung.
           </p>
         </div>
 
@@ -465,7 +526,7 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
             <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
           <?php endif; ?>
 
-          <input type="hidden" name="id_shift" value="<?= (int) $idShift ?>">
+          <input type="hidden" name="id_shift" value="<?= $idShift ?>">
 
           <div>
             <label class="block font-bold text-slate-700 mb-1">
@@ -475,21 +536,19 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
             <input
               type="text"
               name="keterangan"
-              id="inputKetPengeluaran"
               required
-              placeholder="Contoh: Beli es batu / gas / tali"
+              placeholder="Contoh: Beli es batu atau gas"
               class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-brand-navy">
           </div>
 
           <div>
             <label class="block font-bold text-slate-700 mb-1">
-              Nominal Tunai (Rp) *
+              Nominal (Rp) *
             </label>
 
             <input
               type="number"
               name="nominal"
-              id="inputNominalPengeluaran"
               required
               min="1000"
               step="500"
@@ -497,17 +556,17 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
               class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-brand-navy">
           </div>
 
-          <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+          <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"
               onclick="tutupModalTambahPengeluaran()"
-              class="px-4 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+              class="px-4 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl">
               Batal
             </button>
 
             <button
               type="submit"
-              class="px-5 py-2.5 font-bold text-white bg-brand-navy hover:bg-brand-lightNavy rounded-xl shadow cursor-pointer">
+              class="px-5 py-2.5 font-bold text-white bg-brand-navy hover:bg-brand-lightNavy rounded-xl shadow">
               Simpan Pengeluaran
             </button>
           </div>
@@ -515,154 +574,51 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
         </form>
       </div>
     </div>
-    <?php endif; ?>
 
     <!-- Modal Konfirmasi Tutup Shift -->
-    <?php if ($shiftBerjalan): ?>
     <div
       id="modalKonfirmasiTutup"
       class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
 
-      <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative text-center space-y-4">
+      <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4">
 
-        <div>
-          <h3 class="text-lg font-extrabold text-slate-900">
-            Konfirmasi Tutup Shift
-          </h3>
+        <h3 class="text-lg font-extrabold text-slate-900">
+          Konfirmasi Tutup Shift
+        </h3>
 
-          <p class="text-xs text-slate-500 mt-1">
-            Apakah Anda yakin ingin menutup shift ini? Jika ditutup, Anda tidak bisa melakukan transaksi kasir lagi.
-          </p>
-        </div>
+        <p class="text-xs text-slate-500">
+          Apakah Anda yakin ingin menutup Shift <?= htmlspecialchars($namaShift) ?>? Setelah ditutup, transaksi baru tidak dapat dimasukkan ke shift ini.
+        </p>
 
         <div class="grid grid-cols-2 gap-3 pt-2">
+
           <button
             type="button"
             onclick="tutupModalKonfirmasiTutup()"
-            class="w-full py-2.5 font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-2xl cursor-pointer transition">
+            class="w-full py-2.5 font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl">
             Batal
           </button>
 
-          <button
-            type="button"
-            onclick="lanjutKeModalRekapShift()"
-            class="w-full py-2.5 font-bold text-white bg-red-600 hover:bg-red-700 rounded-2xl shadow-md cursor-pointer transition">
-            Ya, Tutup Shift
-          </button>
-        </div>
+          <form
+            action="index.php?controller=dashboard&action=tutupShift"
+            method="POST">
 
-      </div>
-    </div>
+            <?php if (function_exists('csrf_token')): ?>
+              <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+            <?php endif; ?>
 
-    <!-- Modal Rekap Tutup Shift -->
-    <div
-      id="modalTutupShift"
-      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
-
-      <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative text-xs space-y-4">
-
-        <div>
-          <h3 class="text-lg font-extrabold text-slate-900">
-            Tutup Shift <?= htmlspecialchars($namaShift) ?>
-          </h3>
-
-          <p class="text-slate-500 mt-0.5">
-            <?= htmlspecialchars($namaKasir) ?> &bull;
-            <?= htmlspecialchars($tanggalTeks) ?>
-          </p>
-        </div>
-
-        <form
-          action="index.php?controller=dashboard&action=tutupShift"
-          method="POST"
-          class="space-y-4">
-
-          <?php if (function_exists('csrf_token')): ?>
-            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-          <?php endif; ?>
-
-          <input type="hidden" name="id_shift" value="<?= (int) $idShift ?>">
-
-          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 font-medium">
-
-            <div class="flex justify-between">
-              <span class="text-slate-500">Modal awal</span>
-              <span class="font-bold text-slate-800">
-                Rp <?= number_format($modalAwal, 0, ',', '.') ?>
-              </span>
-            </div>
-
-            <div class="flex justify-between">
-              <span class="text-slate-500">Penjualan tunai</span>
-              <span class="font-bold text-emerald-600">
-                + Rp <?= number_format($cashMasuk, 0, ',', '.') ?>
-              </span>
-            </div>
-
-            <div class="flex justify-between pb-2 border-b border-slate-200">
-              <span class="text-slate-500">Pengeluaran</span>
-              <span class="font-bold text-red-600">
-                - Rp <?= number_format($totalPengeluaranShift, 0, ',', '.') ?>
-              </span>
-            </div>
-
-            <div class="flex justify-between text-sm pt-1">
-              <span class="font-bold text-slate-800">
-                Uang seharusnya di laci
-              </span>
-
-              <span class="font-extrabold text-brand-navy">
-                Rp <?= number_format($uangSeharusnyaLaci, 0, ',', '.') ?>
-              </span>
-            </div>
-
-          </div>
-
-          <div>
-            <label class="block font-bold text-slate-700 mb-1">
-              Uang tunai di laci sekarang (Rp) *
-            </label>
-
-            <input
-              type="number"
-              name="uang_fisik"
-              id="inputUangFisik"
-              oninput="hitungSelisih()"
-              value="<?= (int) $uangSeharusnyaLaci ?>"
-              required
-              class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-brand-navy outline-none focus:ring-2 focus:ring-brand-navy">
-          </div>
-
-          <div
-            id="infoSelisihBox"
-            class="p-3 bg-blue-50 text-brand-navy font-bold rounded-xl border border-blue-200 flex items-center justify-between">
-
-            <span>Selisih</span>
-            <span id="textSelisih" class="text-sm">Rp 0 &bull; Pas</span>
-          </div>
-
-          <p class="text-[11px] text-slate-400">
-            Pastikan hitungan uang sudah benar. Setelah shift ditutup, kasir tidak dapat mencatat transaksi tambahan pada shift ini.
-          </p>
-
-          <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
-
-            <button
-              type="button"
-              onclick="tutupModalTutupShift()"
-              class="px-5 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
-              Batal
-            </button>
+            <input type="hidden" name="id_shift" value="<?= $idShift ?>">
 
             <button
               type="submit"
-              class="px-6 py-2.5 font-bold text-white bg-brand-navy hover:bg-brand-lightNavy rounded-xl shadow cursor-pointer">
-              Konfirmasi &amp; Tutup Shift
+              class="w-full py-2.5 font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow">
+              Ya, Tutup Shift
             </button>
 
-          </div>
+          </form>
 
-        </form>
+        </div>
+
       </div>
     </div>
     <?php endif; ?>
@@ -670,11 +626,24 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
   </main>
 
   <script>
-    function formatRupiah(num) {
-      return 'Rp ' + new Intl.NumberFormat('id-ID').format(num);
+    function bukaModalKonfirmasiBuka() {
+      const modal = document.getElementById('modalKonfirmasiBuka');
+
+      if (!modal) return;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
     }
 
-    // Modal Tambah Pengeluaran
+    function tutupModalKonfirmasiBuka() {
+      const modal = document.getElementById('modalKonfirmasiBuka');
+
+      if (!modal) return;
+
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
     function bukaModalTambahPengeluaran() {
       const modal = document.getElementById('modalPengeluaran');
 
@@ -691,40 +660,8 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
 
       modal.classList.add('hidden');
       modal.classList.remove('flex');
-
-      document.getElementById('inputKetPengeluaran').value = '';
-      document.getElementById('inputNominalPengeluaran').value = '';
     }
 
-    // Perhitungan Selisih Kas
-    const uangSeharusnya = <?= (int) $uangSeharusnyaLaci ?>;
-
-    function hitungSelisih() {
-      const input = document.getElementById('inputUangFisik');
-
-      if (!input) return;
-
-      const fisik = parseInt(input.value) || 0;
-      const selisih = fisik - uangSeharusnya;
-
-      const box = document.getElementById('infoSelisihBox');
-      const text = document.getElementById('textSelisih');
-
-      if (selisih === 0) {
-        box.className = 'p-3 bg-blue-50 text-brand-navy font-bold rounded-xl border border-blue-200 flex items-center justify-between';
-        text.innerText = 'Rp 0 • Pas';
-
-      } else if (selisih > 0) {
-        box.className = 'p-3 bg-emerald-50 text-emerald-700 font-bold rounded-xl border border-emerald-200 flex items-center justify-between';
-        text.innerText = '+ ' + formatRupiah(selisih) + ' • Lebih';
-
-      } else {
-        box.className = 'p-3 bg-red-50 text-red-600 font-bold rounded-xl border border-red-200 flex items-center justify-between';
-        text.innerText = '- ' + formatRupiah(Math.abs(selisih)) + ' • Kurang';
-      }
-    }
-
-    // Modal Konfirmasi Tutup Shift
     function bukaModalKonfirmasiTutup() {
       const modal = document.getElementById('modalKonfirmasiTutup');
 
@@ -743,68 +680,24 @@ $formatWaktuShift = $waktuBuka . '–' . $waktuTutup;
       modal.classList.remove('flex');
     }
 
-    // Modal Rekap Shift
-    function lanjutKeModalRekapShift() {
-      tutupModalKonfirmasiTutup();
-
-      const modal = document.getElementById('modalTutupShift');
-
-      if (!modal) return;
-
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
-
-      hitungSelisih();
-    }
-
-    function tutupModalTutupShift() {
-      const modal = document.getElementById('modalTutupShift');
-
-      if (!modal) return;
-
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-    }
-
-    // Keyboard Escape
     window.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
+        tutupModalKonfirmasiBuka();
         tutupModalTambahPengeluaran();
         tutupModalKonfirmasiTutup();
-        tutupModalTutupShift();
       }
     });
 
-    // Klik di luar modal
-    const modalPengeluaran = document.getElementById('modalPengeluaran');
-
-    if (modalPengeluaran) {
-      modalPengeluaran.addEventListener('click', function(e) {
-        if (e.target === this) {
-          tutupModalTambahPengeluaran();
+    document.querySelectorAll(
+      '#modalKonfirmasiBuka, #modalPengeluaran, #modalKonfirmasiTutup'
+    ).forEach(function(modal) {
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
         }
       });
-    }
-
-    const modalKonfirmasi = document.getElementById('modalKonfirmasiTutup');
-
-    if (modalKonfirmasi) {
-      modalKonfirmasi.addEventListener('click', function(e) {
-        if (e.target === this) {
-          tutupModalKonfirmasiTutup();
-        }
-      });
-    }
-
-    const modalTutupShift = document.getElementById('modalTutupShift');
-
-    if (modalTutupShift) {
-      modalTutupShift.addEventListener('click', function(e) {
-        if (e.target === this) {
-          tutupModalTutupShift();
-        }
-      });
-    }
+    });
   </script>
 
 </body>

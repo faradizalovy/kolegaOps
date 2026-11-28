@@ -23,7 +23,6 @@ class DashboardController
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
-
         $this->transaksiModel = new TransaksiModel($pdo);
         $this->menuModel = new MenuModel($pdo);
         $this->stokBahanModel = new StokBahanModel($pdo);
@@ -32,25 +31,21 @@ class DashboardController
         $this->profitModel = new AnalisisProfitModel($pdo);
     }
 
-    /**
-     * Menampilkan Dashboard Utama Owner, Super Admin, dan Admin.
-     */
     public function dashboard_admin(): void
     {
         require_role(['super_admin', 'owner', 'admin']);
 
-        // Menggunakan zona waktu Indonesia.
         date_default_timezone_set('Asia/Jakarta');
 
-        // Mengambil data dari database.
         $statHariIni = $this->transaksiModel->getStatistikHariIni();
         $rekap7Hari = $this->transaksiModel->getPendapatan7Hari();
         $transaksiTerbaru = $this->transaksiModel->getTransaksiTerbaru(4);
         $produkTerlaris = $this->menuModel->getProdukTerlarisHariIni(3);
         $stokKritisCount = $this->stokBahanModel->getStokKritisCount();
-        $infoShift = $this->shiftModel->getInfoOperasionalFooter();
 
-        // Menyiapkan data untuk View.
+        $idUser = (int) (current_user('id_user') ?? 0);
+        $infoShift = $this->shiftModel->getInfoOperasionalFooter($idUser);
+
         $total_penjualan = format_rupiah($statHariIni['total_penjualan']);
         $persen_vs_kemarin = $statHariIni['persen_vs_kemarin'];
         $jumlah_transaksi = $statHariIni['jumlah_transaksi'];
@@ -74,71 +69,43 @@ class DashboardController
         require_once BASE_PATH . '/views/admin/dashboard.php';
     }
 
-    /**
-     * Menampilkan Dashboard Utama Kasir / Pegawai.
-     */
     public function dashboard_pegawai(): void
     {
         require_role(['kasir', 'pegawai']);
 
-        // Pastikan seluruh waktu yang digunakan mengikuti WIB.
         date_default_timezone_set('Asia/Jakarta');
 
         $idUser = (int) (current_user('id_user') ?? 0);
+
         $namaKasir = ucfirst(
             (string) (current_user('username') ?? 'Pegawai')
         );
 
-        // Mengambil shift milik kasir khusus tanggal hari ini.
+        // Mengambil shift terakhir dan shift aktif milik akun login.
         $shiftAktif = $this->shiftModel->getShiftKasirAktif($idUser);
+        $shiftTerakhir = $this->shiftModel->getShiftAktif($idUser);
 
-        /*
-         * Jika belum ada shift hari ini, buka shift baru secara otomatis.
-         *
-         * Pukul 00.00 sampai 14.59 = Pagi.
-         * Pukul 15.00 sampai 23.59 = Sore.
-         *
-         * Jika shift hari ini sudah ditutup, ShiftModel akan tetap
-         * mengembalikan data shift tersebut sehingga tidak dibuat
-         * shift baru setiap kali dashboard dibuka.
-         */
-        if (!$shiftAktif && $idUser > 0) {
-            $jamSekarang = (int) date('H');
-
-            if ($jamSekarang < 15) {
-                $namaShiftDefault = 'Pagi';
-            } else {
-                $namaShiftDefault = 'Sore';
-            }
-
-            $newShiftId = $this->shiftModel->bukaShiftBaru(
-                $idUser,
-                $namaShiftDefault
-            );
-
-            // Ambil kembali data shift setelah proses pembukaan.
-            if ($newShiftId > 0) {
-                $shiftAktif = $this->shiftModel->getShiftKasirAktif($idUser);
-            }
-        }
-
-        // ID shift yang digunakan untuk mengambil data operasional.
         $idShift = $shiftAktif
             ? (int) $shiftAktif['id_shift']
             : 0;
 
-        // Mengambil data penjualan dan operasional.
-        $penjualanHariIni = $this->transaksiModel->getStatistikHariIni();
+        $penjualanHariIni = $this->transaksiModel
+            ->getStatistikHariIni();
 
-        $penjualanShiftSaya = $this->transaksiModel
-            ->getPenjualanShiftKasir($idShift, $idUser);
+        $penjualanShiftSaya = ($idShift > 0)
+            ? $this->transaksiModel->getPenjualanShiftKasir(
+                $idShift,
+                $idUser
+            )
+            : [];
 
         $rekapPembayaran = $penjualanShiftSaya;
 
         $transaksiTerbaru = $this->transaksiModel
             ->getTransaksiTerbaruKasir($idUser, 4);
 
-        $stokKritis = $this->stokBahanModel->getDaftarStokKritis();
+        $stokKritis = $this->stokBahanModel
+            ->getDaftarStokKritis();
 
         $pengeluaranShift = ($idShift > 0)
             ? $this->pengeluaranModel->getPengeluaranByShift($idShift)
@@ -148,29 +115,70 @@ class DashboardController
             ? $this->pengeluaranModel->getTotalPengeluaranByShift($idShift)
             : 0;
 
-        // Menghitung rekonsiliasi kas laci.
-        $modalAwal = 200000;
-
-        $cashMasuk = (float) ($penjualanShiftSaya['total_cash'] ?? 0);
-
-        $uangSeharusnyaLaci = $modalAwal
-            + $cashMasuk
-            - $totalPengeluaranShift;
-
-        // Mengambil pesan notifikasi.
         $pesanSukses = get_flash('success');
         $pesanError = get_flash('error');
 
-        // Menyiapkan tanggal dashboard berdasarkan WIB.
         $tanggalTeks = format_tanggal(date('Y-m-d'));
 
-        // Memuat tampilan dashboard pegawai.
         require_once BASE_PATH . '/views/pegawai/dashboard.php';
     }
 
-    /**
-     * Memproses pencatatan pengeluaran operasional tunai.
-     */
+    public function bukaShift(): void
+    {
+        require_role(['kasir', 'pegawai']);
+
+        date_default_timezone_set('Asia/Jakarta');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: index.php?controller=dashboard&action=dashboard_pegawai');
+            exit;
+        }
+
+        if (isset($_POST['csrf_token']) && function_exists('csrf_verify')) {
+            csrf_verify($_POST['csrf_token']);
+        }
+
+        $idUser = (int) (current_user('id_user') ?? 0);
+
+        if ($idUser <= 0) {
+            set_flash('error', 'Akun pegawai tidak valid.');
+            header('Location: index.php?controller=dashboard&action=dashboard_pegawai');
+            exit;
+        }
+
+        $shiftAktif = $this->shiftModel->getShiftKasirAktif($idUser);
+
+        if ($shiftAktif !== null) {
+            set_flash(
+                'error',
+                'Kamu masih memiliki shift yang sedang berjalan.'
+            );
+
+            header('Location: index.php?controller=dashboard&action=dashboard_pegawai');
+            exit;
+        }
+
+        $idShiftBaru = $this->shiftModel->bukaShiftBaru($idUser);
+
+        if ($idShiftBaru > 0) {
+            $shiftBaru = $this->shiftModel->getShiftKasirAktif($idUser);
+            $namaShiftBaru = $shiftBaru['nama_shift'] ?? 'Shift';
+
+            set_flash(
+                'success',
+                "Shift {$namaShiftBaru} berhasil dibuka."
+            );
+        } else {
+            set_flash(
+                'error',
+                'Shift gagal dibuka. Silakan coba kembali.'
+            );
+        }
+
+        header('Location: index.php?controller=dashboard&action=dashboard_pegawai');
+        exit;
+    }
+
     public function tambahPengeluaran(): void
     {
         require_role(['kasir', 'pegawai']);
@@ -192,19 +200,15 @@ class DashboardController
         $keterangan = trim($_POST['keterangan'] ?? '');
         $nominal = (float) ($_POST['nominal'] ?? 0);
 
-        // Jika ID shift tidak dikirim, ambil shift milik kasir hari ini.
-        if ($idShift <= 0) {
-            $shift = $this->shiftModel->getShiftKasirAktif($idUser);
+        $shiftAktif = $this->shiftModel->getShiftKasirAktif($idUser);
 
-            $idShift = $shift
-                ? (int) $shift['id_shift']
-                : 0;
-        }
-
-        if ($idShift <= 0) {
+        if (
+            !$shiftAktif ||
+            (int) $shiftAktif['id_shift'] !== $idShift
+        ) {
             set_flash(
                 'error',
-                'Tidak ditemukan sesi shift untuk mencatat pengeluaran.'
+                'Shift tidak aktif. Pengeluaran tidak dapat dicatat.'
             );
 
             header('Location: index.php?controller=dashboard&action=dashboard_pegawai');
@@ -245,9 +249,6 @@ class DashboardController
         exit;
     }
 
-    /**
-     * Memproses penutupan shift kasir.
-     */
     public function tutupShift(): void
     {
         require_role(['kasir', 'pegawai']);
@@ -265,51 +266,36 @@ class DashboardController
 
         $idUser = (int) (current_user('id_user') ?? 0);
         $idShift = (int) ($_POST['id_shift'] ?? 0);
-        $uangFisik = (float) ($_POST['uang_fisik'] ?? 0);
 
-        // Jika ID shift tidak dikirim, ambil shift milik kasir hari ini.
-        if ($idShift <= 0) {
-            $shift = $this->shiftModel->getShiftKasirAktif($idUser);
+        $shiftAktif = $this->shiftModel->getShiftKasirAktif($idUser);
 
-            $idShift = $shift
-                ? (int) $shift['id_shift']
-                : 0;
-        }
-
-        if ($idShift <= 0) {
-            set_flash('error', 'Sesi shift tidak ditemukan.');
+        if (
+            !$shiftAktif ||
+            (int) $shiftAktif['id_shift'] !== $idShift
+        ) {
+            set_flash(
+                'error',
+                'Shift tidak ditemukan atau sudah ditutup.'
+            );
 
             header('Location: index.php?controller=dashboard&action=dashboard_pegawai');
             exit;
         }
 
-        // Ambil rekap penjualan dan pengeluaran shift.
-        $penjualanShift = $this->transaksiModel
-            ->getPenjualanShiftKasir($idShift, $idUser);
-
-        $totalPengeluaranShift = $this->pengeluaranModel
-            ->getTotalPengeluaranByShift($idShift);
-
-        $totalTunai = (float) ($penjualanShift['total_cash'] ?? 0);
-        $totalQris = (float) ($penjualanShift['total_qris'] ?? 0);
-
         $berhasil = $this->shiftModel->tutupShift(
             $idShift,
-            $uangFisik,
-            $totalTunai,
-            $totalQris,
-            $totalPengeluaranShift
+            $idUser
         );
 
         if ($berhasil) {
             set_flash(
                 'success',
-                'Shift kasir berhasil ditutup dan seluruh data transaksi telah direkap.'
+                'Shift berhasil ditutup. Rekap transaksi dan pengeluaran tetap tersimpan.'
             );
         } else {
             set_flash(
                 'error',
-                'Gagal menutup sesi shift di database.'
+                'Gagal menutup shift. Silakan coba kembali.'
             );
         }
 
@@ -317,9 +303,6 @@ class DashboardController
         exit;
     }
 
-    /**
-     * Endpoint default controller.
-     */
     public function index(): void
     {
         require_login();
@@ -331,7 +314,7 @@ class DashboardController
             return;
         }
 
-        if ($role === 'kasir') {
+        if (in_array($role, ['kasir', 'pegawai'], true)) {
             $this->dashboard_pegawai();
             return;
         }

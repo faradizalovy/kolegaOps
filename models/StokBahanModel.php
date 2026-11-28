@@ -342,28 +342,30 @@ class StokBahanModel
     }
 
     /**
-     * Filter riwayat stok:
-     * pencarian, jenis, sumber, dan satu tanggal.
+     * Filter riwayat stok berdasarkan pencarian,
+     * jenis, sumber, tanggal, dan pengguna.
      */
     private function buatFilterRiwayat(array $filter): array
     {
         $where = [];
         $params = [];
 
-        // Pencarian nama bahan dan keterangan.
         $search = trim($filter['search'] ?? '');
 
         if ($search !== '') {
             $where[] = "(
                 r.nama_bahan ILIKE :search_bahan
                 OR COALESCE(r.keterangan, '') ILIKE :search_keterangan
+                OR COALESCE(m.nama_menu, '') ILIKE :search_menu
+                OR COALESCE(t.kode_transaksi, '') ILIKE :search_transaksi
             )";
 
             $params[':search_bahan'] = '%' . $search . '%';
             $params[':search_keterangan'] = '%' . $search . '%';
+            $params[':search_menu'] = '%' . $search . '%';
+            $params[':search_transaksi'] = '%' . $search . '%';
         }
 
-        // Filter jenis aktivitas.
         $jenis = $filter['jenis'] ?? 'semua';
 
         if (in_array($jenis, ['masuk', 'keluar'], true)) {
@@ -371,7 +373,6 @@ class StokBahanModel
             $params[':jenis'] = $jenis;
         }
 
-        // Filter sumber aktivitas.
         $sumber = $filter['sumber'] ?? 'semua';
 
         if (in_array($sumber, ['manual', 'pos'], true)) {
@@ -379,7 +380,6 @@ class StokBahanModel
             $params[':sumber'] = $sumber;
         }
 
-        // Filter tanggal harian.
         $tanggal = trim($filter['tanggal'] ?? '');
 
         if ($tanggal !== '') {
@@ -401,6 +401,12 @@ class StokBahanModel
             }
         }
 
+        // Riwayat kasir hanya menampilkan aktivitas miliknya.
+        if (isset($filter['user_id']) && (int) $filter['user_id'] > 0) {
+            $where[] = 'r.id_user = :filter_user_id';
+            $params[':filter_user_id'] = (int) $filter['user_id'];
+        }
+
         $sqlWhere = !empty($where)
             ? 'WHERE ' . implode(' AND ', $where)
             : '';
@@ -418,6 +424,7 @@ class StokBahanModel
                 r.id_bahan,
                 r.id_user,
                 r.id_transaksi,
+                r.id_menu,
                 r.nama_bahan,
                 r.satuan,
                 r.jenis,
@@ -437,21 +444,28 @@ class StokBahanModel
                 ) AS nama_user,
 
                 t.kode_transaksi,
+                m.nama_menu,
 
-                (
-                    SELECT STRING_AGG(DISTINCT m.nama_menu, ', ')
-                    FROM detail_transaksi dt
-                    JOIN menu m ON m.id_menu = dt.id_menu
-                    WHERE dt.id_transaksi = r.id_transaksi
-                ) AS nama_menu
+                CASE
+                    WHEN r.sumber = 'pos' AND r.id_menu IS NOT NULL
+                    THEN m.nama_menu
+                    WHEN r.sumber = 'pos'
+                    THEN 'Menu tidak teridentifikasi'
+                    ELSE NULL
+                END AS kelompok_menu
 
             FROM riwayat_stok r
             LEFT JOIN users u ON u.id_user = r.id_user
             LEFT JOIN transaksi t ON t.id_transaksi = r.id_transaksi
+            LEFT JOIN menu m ON m.id_menu = r.id_menu
 
             {$where}
 
-            ORDER BY r.create_at DESC, r.id_riwayat DESC
+            ORDER BY
+                r.create_at DESC,
+                r.id_transaksi DESC NULLS LAST,
+                r.id_menu ASC NULLS LAST,
+                r.id_riwayat DESC
         ";
 
         $stmt = $this->pdo->prepare($sql);
@@ -477,6 +491,8 @@ class StokBahanModel
                 ) AS stok_keluar
 
             FROM riwayat_stok r
+            LEFT JOIN transaksi t ON t.id_transaksi = r.id_transaksi
+            LEFT JOIN menu m ON m.id_menu = r.id_menu
             {$where}
         ";
 

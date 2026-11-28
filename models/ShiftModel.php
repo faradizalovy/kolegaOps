@@ -1,7 +1,7 @@
 
 <?php
 // models/ShiftModel.php
-// Model Pengelolaan Shift Kasir & Rekapitulasi Operasional
+// Model Pengelolaan Shift Per Kasir KolegaOps
 
 class ShiftModel
 {
@@ -12,9 +12,6 @@ class ShiftModel
         $this->pdo = $pdo;
     }
 
-    /**
-     * Mengambil waktu berdasarkan zona waktu Indonesia.
-     */
     private function getWaktuIndonesia(): DateTimeImmutable
     {
         return new DateTimeImmutable(
@@ -23,35 +20,56 @@ class ShiftModel
         );
     }
 
-    /**
-     * Mengambil informasi shift terakhir pada hari ini.
-     *
-     * @return array|null
-     */
-    public function getShiftAktif(): ?array
+    private function tentukanNamaShift(DateTimeImmutable $waktu): string
     {
-        $tanggalHariIni = $this->getWaktuIndonesia()->format('Y-m-d');
+        $jam = (int) $waktu->format('G');
+
+        if ($jam >= 6 && $jam < 12) {
+            return 'Pagi';
+        }
+
+        if ($jam >= 12 && $jam < 15) {
+            return 'Siang';
+        }
+
+        if ($jam >= 15 && $jam < 18) {
+            return 'Sore';
+        }
+
+        return 'Malam';
+    }
+
+    // Mengambil shift terakhir milik akun tertentu.
+    public function getShiftAktif(int $id_user): ?array
+    {
+        if ($id_user <= 0) {
+            return null;
+        }
 
         $sql = "
             SELECT
                 s.id_shift,
+                s.id_user,
                 s.nama_shift,
+                s.tanggal,
                 s.status,
                 s.waktu_buka,
                 s.waktu_tutup,
+                s.total_penjualan_tunai,
+                s.total_penjualan_qris,
                 s.total_pengeluaran,
                 s.saldo_akhir,
                 COALESCE(u.username, 'Kasir') AS nama_kasir
             FROM shift s
             LEFT JOIN users u ON s.id_user = u.id_user
-            WHERE s.tanggal = :tanggal
+            WHERE s.id_user = :id_user
             ORDER BY s.id_shift DESC
             LIMIT 1
         ";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
-            ':tanggal' => $tanggalHariIni
+            ':id_user' => $id_user
         ]);
 
         $shift = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -59,24 +77,17 @@ class ShiftModel
         return $shift ?: null;
     }
 
-    /**
-     * Mengambil shift aktif milik kasir pada hari ini.
-     *
-     * Shift dari tanggal sebelumnya tidak akan digunakan.
-     * Jika shift hari ini sudah ditutup, data shift terakhir
-     * tetap dikembalikan tanpa membuka shift baru otomatis.
-     *
-     * @param int $id_user
-     * @return array|null
-     */
+    // Mengambil shift yang sedang aktif milik akun login.
     public function getShiftKasirAktif(int $id_user): ?array
     {
-        $tanggalHariIni = $this->getWaktuIndonesia()->format('Y-m-d');
+        if ($id_user <= 0) {
+            return null;
+        }
 
-        // Mengambil shift yang masih terbuka pada hari ini.
         $sql = "
             SELECT
                 s.id_shift,
+                s.id_user,
                 s.nama_shift,
                 s.tanggal,
                 s.status,
@@ -90,7 +101,6 @@ class ShiftModel
             FROM shift s
             LEFT JOIN users u ON s.id_user = u.id_user
             WHERE s.id_user = :id_user
-              AND s.tanggal = :tanggal
               AND s.status = 'buka'
             ORDER BY s.id_shift DESC
             LIMIT 1
@@ -98,65 +108,67 @@ class ShiftModel
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
-            ':id_user' => $id_user,
-            ':tanggal' => $tanggalHariIni
+            ':id_user' => $id_user
         ]);
 
         $shift = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($shift) {
-            return $shift;
-        }
-
-        // Jika tidak ada shift terbuka, ambil shift terakhir hari ini.
-        $sqlHariIni = "
-            SELECT
-                s.id_shift,
-                s.nama_shift,
-                s.tanggal,
-                s.status,
-                s.waktu_buka,
-                s.waktu_tutup,
-                s.total_penjualan_tunai,
-                s.total_penjualan_qris,
-                s.total_pengeluaran,
-                s.saldo_akhir,
-                COALESCE(u.username, 'Kasir') AS nama_kasir
-            FROM shift s
-            LEFT JOIN users u ON s.id_user = u.id_user
-            WHERE s.id_user = :id_user
-              AND s.tanggal = :tanggal
-            ORDER BY s.id_shift DESC
-            LIMIT 1
-        ";
-
-        $stmtToday = $this->pdo->prepare($sqlHariIni);
-        $stmtToday->execute([
-            ':id_user' => $id_user,
-            ':tanggal' => $tanggalHariIni
-        ]);
-
-        $shiftToday = $stmtToday->fetch(PDO::FETCH_ASSOC);
-
-        return $shiftToday ?: null;
+        return $shift ?: null;
     }
 
-    /**
-     * Membuka shift baru untuk kasir.
-     *
-     * @param int $id_user
-     * @param string $nama_shift
-     * @return int
-     */
+    // Membuka shift baru untuk akun yang sedang login.
     public function bukaShiftBaru(
         int $id_user,
-        string $nama_shift = 'Pagi'
+        string $nama_shift = ''
     ): int {
+        if ($id_user <= 0) {
+            return 0;
+        }
+
         try {
+            $this->pdo->beginTransaction();
+
+            // Pastikan akun tersedia.
+            $stmtUser = $this->pdo->prepare("
+                SELECT id_user
+                FROM users
+                WHERE id_user = :id_user
+                  AND status = 'aktif'
+                FOR UPDATE
+            ");
+
+            $stmtUser->execute([
+                ':id_user' => $id_user
+            ]);
+
+            if (!$stmtUser->fetchColumn()) {
+                $this->pdo->rollBack();
+                return 0;
+            }
+
+            // Periksa shift aktif milik akun tersebut.
+            $stmtShift = $this->pdo->prepare("
+                SELECT id_shift
+                FROM shift
+                WHERE id_user = :id_user
+                  AND status = 'buka'
+                LIMIT 1
+            ");
+
+            $stmtShift->execute([
+                ':id_user' => $id_user
+            ]);
+
+            if ($stmtShift->fetchColumn()) {
+                $this->pdo->rollBack();
+                return 0;
+            }
+
             $waktuSekarang = $this->getWaktuIndonesia();
 
-            $tanggalHariIni = $waktuSekarang->format('Y-m-d');
-            $jamSekarang = $waktuSekarang->format('Y-m-d H:i:s');
+            $namaShiftOtomatis = $this->tentukanNamaShift(
+                $waktuSekarang
+            );
 
             $sql = "
                 INSERT INTO shift (
@@ -167,8 +179,7 @@ class ShiftModel
                     id_user,
                     total_penjualan_tunai,
                     total_penjualan_qris,
-                    total_pengeluaran,
-                    saldo_akhir
+                    total_pengeluaran
                 )
                 VALUES (
                     :nama_shift,
@@ -176,7 +187,6 @@ class ShiftModel
                     :waktu_buka,
                     'buka',
                     :id_user,
-                    0,
                     0,
                     0,
                     0
@@ -187,15 +197,23 @@ class ShiftModel
             $stmt = $this->pdo->prepare($sql);
 
             $stmt->execute([
-                ':nama_shift' => $nama_shift,
-                ':tanggal' => $tanggalHariIni,
-                ':waktu_buka' => $jamSekarang,
+                ':nama_shift' => $namaShiftOtomatis,
+                ':tanggal' => $waktuSekarang->format('Y-m-d'),
+                ':waktu_buka' => $waktuSekarang->format('Y-m-d H:i:s'),
                 ':id_user' => $id_user
             ]);
 
-            return (int) $stmt->fetchColumn();
+            $idShift = (int) $stmt->fetchColumn();
 
-        } catch (PDOException $e) {
+            $this->pdo->commit();
+
+            return $idShift;
+
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
             error_log(
                 '[ShiftModel::bukaShiftBaru] ' . $e->getMessage()
             );
@@ -204,24 +222,12 @@ class ShiftModel
         }
     }
 
-    /**
-     * Menutup shift kasir dan merekap saldo akhir.
-     *
-     * @param int $id_shift
-     * @param float $saldo_akhir
-     * @param float $total_tunai
-     * @param float $total_qris
-     * @param float $total_pengeluaran
-     * @return bool
-     */
+    // Menutup shift milik akun yang sedang login.
     public function tutupShift(
         int $id_shift,
-        float $saldo_akhir,
-        float $total_tunai,
-        float $total_qris,
-        float $total_pengeluaran
+        int $id_user
     ): bool {
-        if ($id_shift <= 0) {
+        if ($id_shift <= 0 || $id_user <= 0) {
             return false;
         }
 
@@ -234,28 +240,24 @@ class ShiftModel
                 SET
                     status = 'tutup',
                     waktu_tutup = :waktu_tutup,
-                    saldo_akhir = :saldo_akhir,
-                    total_penjualan_tunai = :total_tunai,
-                    total_penjualan_qris = :total_qris,
-                    total_pengeluaran = :total_pengeluaran,
                     update_at = :update_at
                 WHERE id_shift = :id_shift
+                  AND id_user = :id_user
                   AND status = 'buka'
             ";
 
             $stmt = $this->pdo->prepare($sql);
 
-            return $stmt->execute([
+            $stmt->execute([
                 ':waktu_tutup' => $waktuSekarang,
-                ':saldo_akhir' => $saldo_akhir,
-                ':total_tunai' => $total_tunai,
-                ':total_qris' => $total_qris,
-                ':total_pengeluaran' => $total_pengeluaran,
                 ':update_at' => $waktuSekarang,
-                ':id_shift' => $id_shift
+                ':id_shift' => $id_shift,
+                ':id_user' => $id_user
             ]);
 
-        } catch (PDOException $e) {
+            return $stmt->rowCount() > 0;
+
+        } catch (Throwable $e) {
             error_log(
                 '[ShiftModel::tutupShift] ' . $e->getMessage()
             );
@@ -264,24 +266,23 @@ class ShiftModel
         }
     }
 
-    /**
-     * Mengambil ringkasan operasional harian untuk footer dashboard.
-     *
-     * @return string
-     */
-    public function getInfoOperasionalFooter(): string
+    // Mengambil total pengeluaran operasional hari ini.
+    public function getInfoOperasionalFooter(int $id_user): string
     {
         $tanggalHariIni = $this->getWaktuIndonesia()->format('Y-m-d');
 
-        $shift = $this->getShiftAktif();
+        $shift = $this->getShiftKasirAktif($id_user);
 
         $stmtExp = $this->pdo->prepare("
-            SELECT COALESCE(SUM(nominal), 0)
-            FROM pengeluaran_shift
-            WHERE DATE(create_at) = :tanggal
+            SELECT COALESCE(SUM(ps.nominal), 0)
+            FROM pengeluaran_shift ps
+            INNER JOIN shift s ON ps.id_shift = s.id_shift
+            WHERE s.id_user = :id_user
+              AND s.tanggal = :tanggal
         ");
 
         $stmtExp->execute([
+            ':id_user' => $id_user,
             ':tanggal' => $tanggalHariIni
         ]);
 
@@ -307,13 +308,9 @@ class ShiftModel
                 'UTF-8'
             );
 
-            $statusShift = ($shift['status'] === 'buka')
-                ? 'sedang aktif'
-                : 'telah ditutup';
-
-            return "Operasional: Shift {$namaShift} {$statusShift} oleh {$namaKasir} · Pengeluaran hari ini Rp {$nominalPengeluaran}.";
+            return "Shift {$namaShift} sedang berlangsung oleh {$namaKasir} · Pengeluaran Rp {$nominalPengeluaran}.";
         }
 
-        return "Operasional: Belum ada shift kasir yang dibuka hari ini · Pengeluaran tercatat Rp {$nominalPengeluaran}.";
+        return "Belum ada shift aktif pada akun ini · Pengeluaran Rp {$nominalPengeluaran}.";
     }
 }

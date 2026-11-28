@@ -421,9 +421,38 @@ class TransaksiModel
                 throw new RuntimeException('Daftar pesanan masih kosong.');
             }
 
+            $idUser = (int) ($data['id_user'] ?? 0);
+            $idShift = (int) ($data['id_shift'] ?? 0);
+
+            if ($idUser <= 0 || $idShift <= 0) {
+                throw new RuntimeException('Akun kasir atau shift tidak valid.');
+            }
+
             $this->pdo->beginTransaction();
 
-            // 1. SIMPAN TRANSAKSI
+            // 1. PASTIKAN SHIFT MASIH AKTIF DAN MILIK KASIR
+            $sqlCekShift = "
+                SELECT id_shift
+                FROM shift
+                WHERE id_shift = :id_shift
+                  AND id_user = :id_user
+                  AND status = 'buka'
+                FOR UPDATE
+            ";
+
+            $stmtCekShift = $this->pdo->prepare($sqlCekShift);
+            $stmtCekShift->execute([
+                ':id_shift' => $idShift,
+                ':id_user' => $idUser,
+            ]);
+
+            if (!$stmtCekShift->fetch(PDO::FETCH_ASSOC)) {
+                throw new RuntimeException(
+                    'Shift sudah ditutup atau bukan milik akun kasir ini.'
+                );
+            }
+
+            // 2. SIMPAN TRANSAKSI
             $sqlTrx = "
                 INSERT INTO transaksi (
                     kode_transaksi,
@@ -468,8 +497,8 @@ class TransaksiModel
                 ':nominal_bayar' => (float) ($data['nominal_bayar'] ?? 0),
                 ':kembalian' => (float) ($data['kembalian'] ?? 0),
                 ':catatan_transaksi' => $data['catatan_transaksi'] ?? null,
-                ':id_user' => (int) ($data['id_user'] ?? 0),
-                ':id_shift' => (int) ($data['id_shift'] ?? 0),
+                ':id_user' => $idUser,
+                ':id_shift' => $idShift,
             ]);
 
             $idTransaksi = (int) $stmtTrx->fetchColumn();
@@ -478,7 +507,7 @@ class TransaksiModel
                 throw new RuntimeException('Gagal menyimpan data transaksi.');
             }
 
-            // 2. QUERY DETAIL TRANSAKSI
+            // 3. QUERY DETAIL TRANSAKSI
             $sqlDetail = "
                 INSERT INTO detail_transaksi (
                     id_transaksi,
@@ -499,7 +528,7 @@ class TransaksiModel
 
             $stmtDetail = $this->pdo->prepare($sqlDetail);
 
-            // 3. QUERY STOK MENU
+            // 4. QUERY STOK MENU
             $sqlCekMenu = "
                 SELECT stok_menu
                 FROM menu
@@ -519,7 +548,7 @@ class TransaksiModel
 
             $stmtKurangMenu = $this->pdo->prepare($sqlKurangMenu);
 
-            // 4. QUERY RESEP DAN BAHAN BAKU
+            // 5. QUERY RESEP DAN BAHAN BAKU
             $sqlResep = "
                 SELECT
                     r.id_bahan,
@@ -554,10 +583,12 @@ class TransaksiModel
 
             $stmtKurangBahan = $this->pdo->prepare($sqlKurangBahan);
 
-            // 5. QUERY RIWAYAT STOK POS
+            // 6. QUERY RIWAYAT STOK POS
+            // id_menu disimpan agar bahan dapat ditampilkan di bawah menu asalnya.
             $sqlRiwayatPOS = "
                 INSERT INTO riwayat_stok (
                     id_bahan,
+                    id_menu,
                     id_user,
                     id_transaksi,
                     nama_bahan,
@@ -570,6 +601,7 @@ class TransaksiModel
                     keterangan
                 ) VALUES (
                     :id_bahan,
+                    :id_menu,
                     :id_user,
                     :id_transaksi,
                     :nama_bahan,
@@ -585,7 +617,7 @@ class TransaksiModel
 
             $stmtRiwayatPOS = $this->pdo->prepare($sqlRiwayatPOS);
 
-            // 6. PROSES ITEM PESANAN
+            // 7. PROSES ITEM PESANAN
             foreach ($data['items'] as $item) {
                 $idMenu = (int) ($item['id_menu'] ?? 0);
                 $jumlah = (int) ($item['jumlah'] ?? 0);
@@ -596,7 +628,6 @@ class TransaksiModel
                     );
                 }
 
-                // Simpan detail transaksi
                 $stmtDetail->execute([
                     ':id_transaksi' => $idTransaksi,
                     ':id_menu' => $idMenu,
@@ -606,7 +637,7 @@ class TransaksiModel
                     ':catatan_item' => $item['catatan_item'] ?? null,
                 ]);
 
-                // 6A. CEK DAN KURANGI STOK MENU
+                // 7A. CEK DAN KURANGI STOK MENU
                 $stmtCekMenu->execute([
                     ':id_menu' => $idMenu
                 ]);
@@ -631,20 +662,18 @@ class TransaksiModel
                     ]);
 
                     if ($stmtKurangMenu->rowCount() !== 1) {
-                        throw new RuntimeException(
-                            'Gagal memperbarui stok menu.'
-                        );
+                        throw new RuntimeException('Gagal memperbarui stok menu.');
                     }
                 }
 
-                // 6B. AMBIL RESEP MENU
+                // 7B. AMBIL RESEP MENU
                 $stmtResep->execute([
                     ':id_menu' => $idMenu
                 ]);
 
                 $daftarResep = $stmtResep->fetchAll(PDO::FETCH_ASSOC);
 
-                // 6C. KURANGI STOK DAN CATAT RIWAYAT BAHAN
+                // 7C. KURANGI STOK DAN CATAT RIWAYAT BAHAN
                 foreach ($daftarResep as $resep) {
                     $idBahan = (int) $resep['id_bahan'];
 
@@ -654,9 +683,7 @@ class TransaksiModel
                     $stokSebelum = (float) $resep['stok_bahan'];
 
                     if ($totalPakai <= 0) {
-                        throw new RuntimeException(
-                            'Takaran resep tidak valid.'
-                        );
+                        throw new RuntimeException('Takaran resep tidak valid.');
                     }
 
                     if ($stokSebelum < $totalPakai) {
@@ -669,7 +696,6 @@ class TransaksiModel
 
                     $stokSesudah = $stokSebelum - $totalPakai;
 
-                    // Kurangi stok bahan baku
                     $stmtKurangBahan->execute([
                         ':kurang' => $totalPakai,
                         ':kurang_cek' => $totalPakai,
@@ -683,10 +709,11 @@ class TransaksiModel
                         );
                     }
 
-                    // Catat riwayat stok POS
+                    // Catat riwayat dengan ID menu yang sedang diproses.
                     $stmtRiwayatPOS->execute([
                         ':id_bahan' => $idBahan,
-                        ':id_user' => (int) ($data['id_user'] ?? 0),
+                        ':id_menu' => $idMenu,
+                        ':id_user' => $idUser,
                         ':id_transaksi' => $idTransaksi,
                         ':nama_bahan' => $resep['nama_bahan'],
                         ':satuan' => $resep['satuan'],
@@ -698,7 +725,7 @@ class TransaksiModel
                 }
             }
 
-            // 7. SIMPAN SEMUA PERUBAHAN
+            // 8. SIMPAN SEMUA PERUBAHAN
             $this->pdo->commit();
 
             return [
@@ -732,6 +759,7 @@ class TransaksiModel
         $sqlTrx = "
             SELECT
                 t.id_transaksi,
+                t.id_user,
                 t.kode_transaksi,
                 t.nama_customer,
                 t.total_item,
